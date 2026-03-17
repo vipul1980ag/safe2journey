@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Safe2Journey — Admin Panel</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F0F4F8; color: #222; }
+  header { background: #1565C0; color: #fff; padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header span { font-size: 13px; opacity: 0.75; }
+  #login-screen { max-width: 380px; margin: 80px auto; background: #fff; border-radius: 16px; padding: 36px; box-shadow: 0 4px 24px rgba(0,0,0,.1); }
+  #login-screen h2 { margin-bottom: 20px; color: #1565C0; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  input, select { width: 100%; padding: 10px 14px; border: 1px solid #DDD; border-radius: 8px; font-size: 14px; }
+  input:focus, select:focus { outline: none; border-color: #1565C0; }
+  .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; }
+  .btn-primary { background: #1565C0; color: #fff; }
+  .btn-primary:hover { background: #0D47A1; }
+  .btn-danger { background: #D32F2F; color: #fff; }
+  .btn-danger:hover { background: #B71C1C; }
+  .btn-success { background: #2E7D32; color: #fff; }
+  .btn-success:hover { background: #1B5E20; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+  #app { display: none; }
+  nav { display: flex; gap: 4px; background: #fff; padding: 8px 20px; border-bottom: 1px solid #E0E0E0; }
+  .tab { padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #555; }
+  .tab.active { background: #1565C0; color: #fff; }
+  .panel { display: none; padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+  .panel.active { display: block; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+  .stat-card .val { font-size: 32px; font-weight: 800; color: #1565C0; }
+  .stat-card .lbl { font-size: 13px; color: #777; margin-top: 4px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 6px rgba(0,0,0,.07); margin-bottom: 20px; }
+  .card h3 { font-size: 16px; margin-bottom: 16px; color: #333; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .5px; padding: 8px 10px; text-align: left; border-bottom: 2px solid #F0F0F0; }
+  td { padding: 10px; font-size: 13px; border-bottom: 1px solid #F5F5F5; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .tag-bus { background: #E3F2FD; color: #1565C0; }
+  .tag-metro { background: #F3E5F5; color: #7B1FA2; }
+  .tag-walking { background: #E8F5E9; color: #2E7D32; }
+  .tag-taxi { background: #FFF3E0; color: #E65100; }
+  .tag-auto { background: #E0F2F1; color: #00695C; }
+  .add-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; align-items: end; margin-bottom: 20px; }
+  .add-form .full { grid-column: 1 / -1; }
+  .err { color: #D32F2F; font-size: 13px; margin-top: 8px; }
+  .mode-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .mode-chip { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; display: none; z-index: 999; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>Safe2Journey Admin</h1>
+  <span id="admin-info">Not logged in</span>
+</header>
+
+<div id="login-screen">
+  <h2>Admin Login</h2>
+  <div class="form-group">
+    <label>Admin Key</label>
+    <input type="password" id="admin-key-input" placeholder="Enter admin key" />
+  </div>
+  <div id="login-err" class="err"></div>
+  <button class="btn btn-primary" onclick="doLogin()" style="width:100%;margin-top:8px">Login</button>
+</div>
+
+<div id="app">
+  <nav>
+    <div class="tab active" onclick="showTab('stats')">Dashboard</div>
+    <div class="tab" onclick="showTab('bus')">Bus Stops</div>
+    <div class="tab" onclick="showTab('metro')">Metro Stations</div>
+    <div class="tab" onclick="showTab('rates')">Rates</div>
+    <div class="tab" onclick="showTab('users')">Users</div>
+    <div class="tab" onclick="showTab('journeys')">Journeys</div>
+  </nav>
+
+  <!-- Dashboard -->
+  <div class="panel active" id="panel-stats">
+    <div class="stats-grid" id="stats-grid"></div>
+    <div class="card">
+      <h3>Popular Transport Modes</h3>
+      <div class="mode-bar" id="mode-bar"></div>
+    </div>
+    <div class="card">
+      <h3>Recent Journeys</h3>
+      <table id="recent-table">
+        <thead><tr><th>#</th><th>From</th><th>To</th><th>Modes</th><th>Cost</th><th>Duration</th><th>Date</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bus Stops -->
+  <div class="panel" id="panel-bus">
+    <div class="card">
+      <h3>Add Bus Stop</h3>
+      <div class="add-form">
+        <div class="form-group"><label>Name</label><input id="bs-name" placeholder="Stop name" /></div>
+        <div class="form-group"><label>Route ID</label><input id="bs-route" placeholder="e.g. 574" /></div>
+        <div class="form-group"><label>Latitude</label><input id="bs-lat" placeholder="28.6315" /></div>
+        <div class="form-group"><label>Longitude</label><input id="bs-lng" placeholder="77.2167" /></div>
+        <div class="form-group" style="align-self:end"><button class="btn btn-success" onclick="addBusStop()">Add Stop</button></div>
+      </div>
+      <div id="bs-err" class="err"></div>
+    </div>
+    <div class="card">
+      <h3>All Bus Stops</h3>
+      <table id="bus-table">
+        <thead><tr><th>#</th><th>Name</th><th>Route</th><th>Lat</th><th>Lng</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Metro Stations -->
+  <div class="panel" id="panel-metro">
+    <div class="card">
+      <h3>Add Metro Station</h3>
+      <div class="add-form">
+        <div class="form-group"><label>Name</label><input id="ms-name" placeholder="Station name" /></div>
+        <div class="form-group"><label>Line</label><input id="ms-line" placeholder="e.g. Yellow Line" /></div>
+        <div class="form-group"><label>Latitude</label><input id="ms-lat" placeholder="28.6331" /></div>
+        <div class="form-group"><label>Longitude</label><input id="ms-lng" placeholder="77.2195" /></div>
+        <div class="form-group" style="align-self:end"><button class="btn btn-success" onclick="addMetroStation()">Add Station</button></div>
+      </div>
+      <div id="ms-err" class="err"></div>
+    </div>
+    <div class="card">
+      <h3>All Metro Stations</h3>
+      <table id="metro-table">
+        <thead><tr><th>#</th><th>Name</th><th>Line</th><th>Lat</th><th>Lng</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Rates -->
+  <div class="panel" id="panel-rates">
+    <div class="card">
+      <h3>Add Transport Rate</h3>
+      <div class="add-form">
+        <div class="form-group"><label>City / Region</label><input id="rt-city" placeholder="e.g. Mumbai" /></div>
+        <div class="form-group"><label>Carrier</label><input id="rt-carrier" placeholder="e.g. Blue Dart" /></div>
+        <div class="form-group"><label>Truck Type</label><input id="rt-truck" placeholder="e.g. 20ft Container" /></div>
+        <div class="form-group"><label>Charge / km</label><input id="rt-charge" type="number" step="0.01" placeholder="12.50" /></div>
+        <div class="form-group"><label>Currency</label>
+          <select id="rt-currency">
+            <option value="INR">INR ₹</option>
+            <option value="EUR">EUR €</option>
+            <option value="USD">USD $</option>
+            <option value="GBP">GBP £</option>
+            <option value="AED">AED</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Notes</label><input id="rt-notes" placeholder="Optional notes" /></div>
+        <div class="form-group full" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-success" onclick="addRate()">Add Rate</button>
+          <button class="btn btn-primary" onclick="downloadTemplate()">⬇ Download Excel Template</button>
+          <label class="btn btn-primary" style="cursor:pointer;margin:0">
+            ⬆ Upload Excel / CSV
+            <input type="file" id="rt-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="uploadRates(this)" />
+          </label>
+        </div>
+      </div>
+      <div id="rt-err" class="err"></div>
+      <div id="rt-msg" style="color:#2E7D32;font-size:13px;margin-top:6px"></div>
+    </div>
+    <div class="card">
+      <h3>All Transport Rates</h3>
+      <table id="rates-table">
+        <thead><tr><th>#</th><th>City</th><th>Carrier</th><th>Truck Type</th><th>Charge/km</th><th>Currency</th><th>Notes</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Users -->
+  <div class="panel" id="panel-users">
+    <div class="card">
+      <h3>Registered Users</h3>
+      <table id="users-table">
+        <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Joined</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Journeys -->
+  <div class="panel" id="panel-journeys">
+    <div class="card">
+      <h3>All Journeys</h3>
+      <table id="journeys-table">
+        <thead><tr><th>#</th><th>From</th><th>To</th><th>Modes</th><th>Cost (₹)</th><th>Duration</th><th>Status</th><th>User</th><th>Date</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE = '';
+let adminKey = '';
+
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + '/api/admin' + path, {
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+    ...opts,
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Request failed'); }
+  return res.json();
+}
+
+function toast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = ok ? '#2E7D32' : '#D32F2F';
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2500);
+}
+
+async function doLogin() {
+  adminKey = document.getElementById('admin-key-input').value.trim();
+  try {
+    await api('/stats');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('admin-info').textContent = 'Logged in as Admin';
+    loadAll();
+  } catch {
+    document.getElementById('login-err').textContent = 'Invalid admin key.';
+    adminKey = '';
+  }
+}
+
+function showTab(name) {
+  const tabs = ['stats','bus','metro','rates','users','journeys'];
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', tabs[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+function loadAll() { loadStats(); loadBusStops(); loadMetroStations(); loadRates(); loadUsers(); loadJourneys(); }
+
+async function loadStats() {
+  const s = await api('/stats');
+  const MODE_COLORS = { bus:'#E3F2FD|#1565C0', metro:'#F3E5F5|#7B1FA2', walking:'#E8F5E9|#2E7D32', taxi:'#FFF3E0|#E65100', auto:'#E0F2F1|#00695C', car_bike:'#ECEFF1|#455A64' };
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="val">${s.totalJourneys}</div><div class="lbl">Total Journeys</div></div>
+    <div class="stat-card"><div class="val">₹${s.avgCost}</div><div class="lbl">Avg Journey Cost</div></div>
+    <div class="stat-card"><div class="val">${s.avgDurationMins} min</div><div class="lbl">Avg Duration</div></div>
+  `;
+  const bar = document.getElementById('mode-bar');
+  bar.innerHTML = Object.entries(s.modeCounts).sort((a,b)=>b[1]-a[1]).map(([m, c]) => {
+    const [bg, clr] = (MODE_COLORS[m] || '#EEE|#333').split('|');
+    return `<span class="mode-chip" style="background:${bg};color:${clr}">${m}: ${c}</span>`;
+  }).join('');
+  const tbody = document.querySelector('#recent-table tbody');
+  tbody.innerHTML = s.recentJourneys.map(j => `<tr>
+    <td>${j.id}</td><td>${j.start_name||'—'}</td><td>${j.end_name||'—'}</td>
+    <td>${JSON.parse(j.modes||'[]').map(m=>`<span class="tag tag-${m}">${m}</span>`).join(' ')}</td>
+    <td>₹${j.total_cost}</td><td>${j.total_duration} min</td>
+    <td>${j.created_at ? new Date(j.created_at).toLocaleDateString() : '—'}</td>
+  </tr>`).join('');
+}
+
+async function loadBusStops() {
+  const stops = await api('/bus-stops');
+  const tbody = document.querySelector('#bus-table tbody');
+  tbody.innerHTML = stops.map(s => `<tr id="bs-row-${s.id}">
+    <td>${s.id}</td>
+    <td><span id="bs-name-${s.id}">${s.name}</span></td>
+    <td><span id="bs-route-${s.id}">${s.route_id}</span></td>
+    <td><span id="bs-lat-${s.id}">${s.lat}</span></td>
+    <td><span id="bs-lng-${s.id}">${s.lng}</span></td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="editBusStop(${s.id},'${s.name.replace(/'/g,"\\'")}','${s.route_id}','${s.lat}','${s.lng}')">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteBusStop(${s.id})">Delete</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function editBusStop(id, name, route_id, lat, lng) {
+  const newName    = prompt('Name:', name);     if (newName    === null) return;
+  const newRoute   = prompt('Route ID:', route_id); if (newRoute === null) return;
+  const newLat     = prompt('Latitude:', lat);  if (newLat     === null) return;
+  const newLng     = prompt('Longitude:', lng); if (newLng     === null) return;
+  try {
+    await api('/bus-stops/' + id, { method: 'PUT', body: JSON.stringify({ name: newName, route_id: newRoute, lat: newLat, lng: newLng }) });
+    toast('Bus stop updated!');
+    loadBusStops();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function addBusStop() {
+  const name = document.getElementById('bs-name').value.trim();
+  const route_id = document.getElementById('bs-route').value.trim();
+  const lat = document.getElementById('bs-lat').value.trim();
+  const lng = document.getElementById('bs-lng').value.trim();
+  document.getElementById('bs-err').textContent = '';
+  try {
+    await api('/bus-stops', { method: 'POST', body: JSON.stringify({ name, route_id, lat, lng }) });
+    toast('Bus stop added!');
+    ['bs-name','bs-route','bs-lat','bs-lng'].forEach(id => document.getElementById(id).value = '');
+    loadBusStops(); loadStats();
+  } catch(e) { document.getElementById('bs-err').textContent = e.message; }
+}
+
+async function deleteBusStop(id) {
+  if (!confirm('Delete this bus stop?')) return;
+  try { await api('/bus-stops/' + id, { method: 'DELETE' }); toast('Deleted.'); loadBusStops(); loadStats(); }
+  catch(e) { toast(e.message, false); }
+}
+
+async function loadMetroStations() {
+  const stations = await api('/metro-stations');
+  const tbody = document.querySelector('#metro-table tbody');
+  tbody.innerHTML = stations.map(s => `<tr>
+    <td>${s.id}</td><td>${s.name}</td><td>${s.line}</td><td>${s.lat}</td><td>${s.lng}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="editMetroStation(${s.id},'${s.name.replace(/'/g,"\\'")}','${s.line.replace(/'/g,"\\'")}','${s.lat}','${s.lng}')">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteMetroStation(${s.id})">Delete</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function editMetroStation(id, name, line, lat, lng) {
+  const newName = prompt('Name:', name);  if (newName === null) return;
+  const newLine = prompt('Line:', line);  if (newLine === null) return;
+  const newLat  = prompt('Latitude:', lat);  if (newLat  === null) return;
+  const newLng  = prompt('Longitude:', lng); if (newLng  === null) return;
+  try {
+    await api('/metro-stations/' + id, { method: 'PUT', body: JSON.stringify({ name: newName, line: newLine, lat: newLat, lng: newLng }) });
+    toast('Metro station updated!');
+    loadMetroStations();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function addMetroStation() {
+  const name = document.getElementById('ms-name').value.trim();
+  const line = document.getElementById('ms-line').value.trim();
+  const lat = document.getElementById('ms-lat').value.trim();
+  const lng = document.getElementById('ms-lng').value.trim();
+  document.getElementById('ms-err').textContent = '';
+  try {
+    await api('/metro-stations', { method: 'POST', body: JSON.stringify({ name, line, lat, lng }) });
+    toast('Metro station added!');
+    ['ms-name','ms-line','ms-lat','ms-lng'].forEach(id => document.getElementById(id).value = '');
+    loadMetroStations(); loadStats();
+  } catch(e) { document.getElementById('ms-err').textContent = e.message; }
+}
+
+async function deleteMetroStation(id) {
+  if (!confirm('Delete this metro station?')) return;
+  try { await api('/metro-stations/' + id, { method: 'DELETE' }); toast('Deleted.'); loadMetroStations(); loadStats(); }
+  catch(e) { toast(e.message, false); }
+}
+
+async function loadUsers() {
+  const users = await api('/users');
+  const tbody = document.querySelector('#users-table tbody');
+  tbody.innerHTML = users.map(u => `<tr>
+    <td>${u.id}</td><td>${u.name}</td><td>${u.email}</td>
+    <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+  </tr>`).join('');
+}
+
+async function loadJourneys() {
+  const s = await api('/stats');
+  const tbody = document.querySelector('#journeys-table tbody');
+  tbody.innerHTML = s.recentJourneys.map(j => `<tr>
+    <td>${j.id}</td><td>${j.start_name||'—'}</td><td>${j.end_name||'—'}</td>
+    <td>${JSON.parse(j.modes||'[]').map(m=>`<span class="tag tag-${m}">${m}</span>`).join(' ')}</td>
+    <td>₹${j.total_cost}</td><td>${j.total_duration} min</td>
+    <td><span class="tag" style="background:${j.status==='completed'?'#E8F5E9':'#FFF8E1'};color:${j.status==='completed'?'#2E7D32':'#F57F17'}">${j.status||'planned'}</span></td>
+    <td>${j.user_id||'Guest'}</td>
+    <td>${j.created_at ? new Date(j.created_at).toLocaleString() : '—'}</td>
+  </tr>`).join('');
+}
+
+document.getElementById('admin-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// ── Rates ─────────────────────────────────────────────────────────────────────
+async function loadRates() {
+  const rates = await api('/rates');
+  const tbody = document.querySelector('#rates-table tbody');
+  tbody.innerHTML = rates.map(r => `<tr>
+    <td>${r.id}</td>
+    <td>${r.city || '—'}</td>
+    <td>${r.carrier}</td>
+    <td>${r.truck_type}</td>
+    <td><strong>${r.charge_per_km}</strong></td>
+    <td>${r.currency}</td>
+    <td>${r.notes || '—'}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="editRate(${r.id},'${esc(r.city)}','${esc(r.carrier)}','${esc(r.truck_type)}','${r.charge_per_km}','${r.currency}','${esc(r.notes)}')">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteRate(${r.id})">Delete</button>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#aaa;padding:20px">No rates yet. Add one above.</td></tr>';
+}
+
+function esc(s) { return (s || '').replace(/'/g, "\\'"); }
+
+async function addRate() {
+  const city = document.getElementById('rt-city').value.trim();
+  const carrier = document.getElementById('rt-carrier').value.trim();
+  const truck_type = document.getElementById('rt-truck').value.trim();
+  const charge_per_km = document.getElementById('rt-charge').value.trim();
+  const currency = document.getElementById('rt-currency').value;
+  const notes = document.getElementById('rt-notes').value.trim();
+  document.getElementById('rt-err').textContent = '';
+  document.getElementById('rt-msg').textContent = '';
+  if (!carrier || !truck_type || !charge_per_km) {
+    document.getElementById('rt-err').textContent = 'Carrier, Truck Type, and Charge/km are required.';
+    return;
+  }
+  try {
+    await api('/rates', { method: 'POST', body: JSON.stringify({ city, carrier, truck_type, charge_per_km, currency, notes }) });
+    toast('Rate added!');
+    ['rt-city','rt-carrier','rt-truck','rt-charge','rt-notes'].forEach(id => document.getElementById(id).value = '');
+    loadRates();
+  } catch(e) { document.getElementById('rt-err').textContent = e.message; }
+}
+
+async function editRate(id, city, carrier, truck_type, charge_per_km, currency, notes) {
+  const nCity      = prompt('City / Region:', city);       if (nCity      === null) return;
+  const nCarrier   = prompt('Carrier:', carrier);           if (nCarrier   === null) return;
+  const nTruck     = prompt('Truck Type:', truck_type);     if (nTruck     === null) return;
+  const nCharge    = prompt('Charge / km:', charge_per_km); if (nCharge    === null) return;
+  const nCurrency  = prompt('Currency (INR/EUR/USD/GBP/AED):', currency); if (nCurrency === null) return;
+  const nNotes     = prompt('Notes:', notes);               if (nNotes     === null) return;
+  try {
+    await api('/rates/' + id, { method: 'PUT', body: JSON.stringify({ city: nCity, carrier: nCarrier, truck_type: nTruck, charge_per_km: nCharge, currency: nCurrency, notes: nNotes }) });
+    toast('Rate updated!'); loadRates();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function deleteRate(id) {
+  if (!confirm('Delete this rate?')) return;
+  try { await api('/rates/' + id, { method: 'DELETE' }); toast('Deleted.'); loadRates(); }
+  catch(e) { toast(e.message, false); }
+}
+
+function downloadTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['city', 'carrier', 'truck_type', 'charge_per_km', 'currency', 'notes'],
+    ['Mumbai', 'Blue Dart', '20ft Container', 12.5, 'INR', 'Standard rate'],
+    ['Delhi', 'DTDC', '40ft Trailer', 9.8, 'INR', ''],
+    ['', 'Sample Carrier', '10ft Mini Truck', 7.0, 'USD', 'Optional notes'],
+  ]);
+  ws['!cols'] = [14,18,20,16,10,22].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Transport Rates');
+  XLSX.writeFile(wb, 'transport_rates_template.xlsx');
+}
+
+async function uploadRates(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('rt-err').textContent = '';
+  document.getElementById('rt-msg').textContent = 'Parsing file...';
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const rates = rows
+        .map(r => ({
+          city: r.city || r.City || '',
+          carrier: r.carrier || r.Carrier || '',
+          truck_type: r.truck_type || r['Truck Type'] || r.TruckType || '',
+          charge_per_km: parseFloat(r.charge_per_km || r['Charge/km'] || r.ChargePerKm || 0),
+          currency: r.currency || r.Currency || 'INR',
+          notes: r.notes || r.Notes || '',
+        }))
+        .filter(r => r.carrier && r.truck_type && r.charge_per_km > 0);
+
+      if (!rates.length) {
+        document.getElementById('rt-err').textContent = 'No valid rows found. Check that columns: city, carrier, truck_type, charge_per_km are present.';
+        document.getElementById('rt-msg').textContent = '';
+        return;
+      }
+      const result = await api('/rates/bulk', { method: 'POST', body: JSON.stringify({ rates }) });
+      document.getElementById('rt-msg').textContent = `✓ Imported ${result.inserted} rate(s) successfully.`;
+      toast(`Imported ${result.inserted} rates!`);
+      loadRates();
+    } catch(err) {
+      document.getElementById('rt-err').textContent = 'Error: ' + err.message;
+      document.getElementById('rt-msg').textContent = '';
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+</script>
+</body>
+</html>

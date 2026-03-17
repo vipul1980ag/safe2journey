@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.env
+server/db/*.json
+mobile_native/android/
+mobile_native/ios/
+mobile_native/.expo/
