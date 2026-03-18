@@ -8,14 +8,12 @@
 //   Physical device   → http://<your-machine-local-ip>:3001/api
 //   Production        → https://your-domain.com/api
 
-const DEV_SERVER_IP = '192.168.178.60'; // change to your machine's local IP
-
 const BASE_URL =
   process.env.SAFE2JOURNEY_API ||
-  `http://${DEV_SERVER_IP}:3001/api`;
+  'https://safe2journey.onrender.com/api';
 
 export const SERVER_ROOT =
   process.env.SAFE2JOURNEY_ROOT ||
-  `http://${DEV_SERVER_IP}:3001`;
+  'https://safe2journey.onrender.com';
 
 export default BASE_URL;
