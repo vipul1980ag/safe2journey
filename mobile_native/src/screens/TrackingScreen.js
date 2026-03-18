@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, Animated, Share, Platform,
+  Alert, ActivityIndicator, Animated, Share, Platform, Linking,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { replanJourney, reportDisruption, completeJourney, pushTrackPosition, SERVER_ROOT } from '../services/api';
+import { fetchNearbyParking, fetchDrivingRoute, formatParkingRate, formatDistance, formatETA } from '../services/parking';
 import RouteCard from '../components/RouteCard';
 
 const MODE_LABELS = {
@@ -114,6 +115,14 @@ export default function TrackingScreen({ route, navigation }) {
   const [autoAdvanced, setAutoAdvanced]       = useState(false); // prevent repeat prompts
   const [disruptionChecking, setDisruptionChecking] = useState(false);
   const [disruptionPlan, setDisruptionPlan]   = useState(null); // alternative routes after disruption
+
+  // 🅿️ Parking integration (Park As You Desire)
+  const [isPActive, setIsPActive]             = useState(false);  // P button toggled on
+  const [parkingSuggestion, setParkingSuggestion] = useState(null); // { parking, distText, etaText }
+  const [loadingParking, setLoadingParking]   = useState(false);
+  const parkingBannerAnim                     = useRef(new Animated.Value(0)).current;
+  const parkingCooldownRef                    = useRef(false);    // 2-min cooldown between auto-triggers
+  const parkingAutoTriggeredRef               = useRef(false);    // triggered once per approach
 
   const journeyStartTime      = useRef(Date.now());
   const watchId               = useRef(null);
@@ -470,6 +479,96 @@ export default function TrackingScreen({ route, navigation }) {
     }
   }
 
+  // ── Parking suggestion (P button) ─────────────────────────────────────────
+
+  async function triggerParkingSuggestion(lat, lng, manual = false) {
+    if (!manual && parkingCooldownRef.current) return;
+    if (!manual && parkingAutoTriggeredRef.current) return;
+    parkingCooldownRef.current = true;
+    if (!manual) parkingAutoTriggeredRef.current = true;
+    setTimeout(() => { parkingCooldownRef.current = false; }, 120000); // 2-min cooldown
+
+    setLoadingParking(true);
+    try {
+      const spots = await fetchNearbyParking(lat, lng, 1000);
+      if (!spots.length) {
+        if (manual) Alert.alert('No Parking Found', 'No parking spots found within 1 km. Try again closer to your destination.');
+        setLoadingParking(false);
+        return;
+      }
+      const nearest = spots[0];
+
+      let routeInfo = null;
+      try { routeInfo = await fetchDrivingRoute(lat, lng, nearest.lat, nearest.lng); } catch (_) {}
+
+      setParkingSuggestion({
+        parking: nearest,
+        distText: formatDistance(nearest.distance),
+        etaText: formatETA(routeInfo?.duration),
+        rateText: formatParkingRate(nearest),
+      });
+      showParkingBanner();
+    } catch (err) {
+      if (manual) Alert.alert('Parking Search Failed', 'Could not fetch parking data. Check your connection.');
+    } finally {
+      setLoadingParking(false);
+    }
+  }
+
+  function showParkingBanner() {
+    Animated.spring(parkingBannerAnim, {
+      toValue: 1, useNativeDriver: true, tension: 80, friction: 12,
+    }).start();
+  }
+
+  function hideParkingBanner() {
+    Animated.timing(parkingBannerAnim, { toValue: 0, duration: 250, useNativeDriver: true })
+      .start(() => setParkingSuggestion(null));
+  }
+
+  function navigateToParking() {
+    if (!parkingSuggestion?.parking) return;
+    const { lat, lng } = parkingSuggestion.parking;
+    const url = Platform.OS === 'ios'
+      ? `maps://app?daddr=${lat},${lng}`
+      : `google.navigation:q=${lat},${lng}`;
+    Linking.openURL(url).catch(() => Linking.openURL(`https://maps.google.com/?daddr=${lat},${lng}`));
+  }
+
+  function handlePButton() {
+    setIsPActive(prev => {
+      const next = !prev;
+      if (next && currentPosition) {
+        // Manual trigger — search immediately
+        triggerParkingSuggestion(currentPosition.latitude, currentPosition.longitude, true);
+      } else if (!next) {
+        hideParkingBanner();
+      }
+      return next;
+    });
+  }
+
+  // Auto-trigger: last leg, within 800m of destination, speed slowing down
+  useEffect(() => {
+    if (!isPActive) return;
+    if (!isLastLeg) return;
+    if (!currentPosition) return;
+    if (distToEndKm === null || distToEndKm > 0.8) return;
+    if (liveSpeedKmh > 30) return; // only trigger when not at highway speed
+    triggerParkingSuggestion(currentPosition.latitude, currentPosition.longitude, false);
+  }, [distToEndKm, liveSpeedKmh, isPActive, isLastLeg]);
+
+  // Reset auto-triggered flag if user moves away from destination again
+  useEffect(() => {
+    if (distToEndKm !== null && distToEndKm > 1.5) {
+      parkingAutoTriggeredRef.current = false;
+    }
+  }, [distToEndKm]);
+
+  const parkingBannerTranslateY = parkingBannerAnim.interpolate({
+    inputRange: [0, 1], outputRange: [260, 0],
+  });
+
   // ── Derived values ─────────────────────────────────────────────────────────
   const elapsedMins    = Math.floor(elapsedSecs / 60);
   const elapsedSecsRem = elapsedSecs % 60;
@@ -479,6 +578,70 @@ export default function TrackingScreen({ route, navigation }) {
   return (
     <View style={{ flex: 1 }}>
       <AlertBanner alerts={alerts} onDismiss={dismissAlert} />
+
+      {/* ── Floating P (Parking) button ── */}
+      <TouchableOpacity
+        style={[styles.pBtn, isPActive && styles.pBtnActive]}
+        onPress={handlePButton}
+        activeOpacity={0.85}
+      >
+        {loadingParking
+          ? <ActivityIndicator size="small" color={isPActive ? '#fff' : '#1565C0'} />
+          : <Text style={[styles.pBtnText, isPActive && styles.pBtnTextActive]}>P</Text>}
+        {isPActive && <View style={styles.pBtnLiveDot} />}
+      </TouchableOpacity>
+
+      {/* ── Parking suggestion banner ── */}
+      {parkingSuggestion && (
+        <Animated.View style={[styles.parkingBanner, { transform: [{ translateY: parkingBannerTranslateY }] }]}>
+          <View style={styles.parkingBannerHeader}>
+            <Text style={styles.parkingBannerIcon}>🅿️</Text>
+            <View style={styles.parkingBannerTitleWrap}>
+              <Text style={styles.parkingBannerTitle}>Parking Near Destination</Text>
+              <Text style={styles.parkingBannerSub} numberOfLines={1}>
+                {parkingSuggestion.parking.name}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={hideParkingBanner} style={styles.parkingBannerClose}>
+              <Text style={styles.parkingBannerCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.parkingBannerGrid}>
+            <View style={styles.parkingBannerCell}>
+              <Text style={styles.parkingCellLabel}>💰 Rate</Text>
+              <Text style={styles.parkingCellValue}>{parkingSuggestion.rateText}</Text>
+            </View>
+            <View style={styles.parkingBannerCell}>
+              <Text style={styles.parkingCellLabel}>📏 Distance</Text>
+              <Text style={styles.parkingCellValue}>{parkingSuggestion.distText}</Text>
+            </View>
+            <View style={styles.parkingBannerCell}>
+              <Text style={styles.parkingCellLabel}>⏱ Drive time</Text>
+              <Text style={styles.parkingCellValue}>{parkingSuggestion.etaText}</Text>
+            </View>
+            <View style={styles.parkingBannerCell}>
+              <Text style={styles.parkingCellLabel}>🔓 Access</Text>
+              <Text style={styles.parkingCellValue}>
+                {parkingSuggestion.parking.isPrivate ? 'Private' : 'Public'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.parkingBannerActions}>
+            <TouchableOpacity style={styles.parkingNavBtn} onPress={navigateToParking} activeOpacity={0.85}>
+              <Text style={styles.parkingNavBtnText}>🗺 Navigate to Parking</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.parkingMoreBtn}
+              onPress={() => { hideParkingBanner(); triggerParkingSuggestion(currentPosition.latitude, currentPosition.longitude, true); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.parkingMoreBtnText}>🔄 Find Another</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
 
       <ScrollView style={styles.container}>
 
@@ -623,6 +786,46 @@ export default function TrackingScreen({ route, navigation }) {
               : `Complete Leg · Next: ${MODE_ICONS[selectedRoute.legs[currentLegIndex + 1]?.mode] || ''} ${MODE_LABELS[selectedRoute.legs[currentLegIndex + 1]?.mode] || ''}`}
           </Text>
         </TouchableOpacity>
+
+        {/* 🅿️ Parking finder card */}
+        <View style={[styles.shareCard, isPActive && styles.parkingCardActive]}>
+          <View style={styles.shareTop}>
+            <Text style={styles.shareTitle}>🅿️ Find Parking Near Destination</Text>
+            {isPActive && (
+              <View style={[styles.shareLiveChip, { backgroundColor: '#E3F2FD' }]}>
+                <Text style={[styles.shareLiveDot, { color: '#1565C0' }]}>●</Text>
+                <Text style={[styles.shareLiveText, { color: '#1565C0' }]}>Active</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.shareDesc}>
+            {isPActive
+              ? 'Parking suggestions are on. Will auto-suggest when you are within 800 m of your destination.'
+              : 'Tap P to activate parking suggestions as you approach your destination. Powered by OpenStreetMap.'}
+          </Text>
+          <View style={styles.shareBtns}>
+            <TouchableOpacity
+              style={[styles.shareStartBtn, isPActive && { backgroundColor: '#E65100' }]}
+              onPress={handlePButton}
+              disabled={loadingParking}
+            >
+              {loadingParking
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.shareStartBtnText}>
+                    {isPActive ? '⏹ Turn Off Parking P' : '🅿 Turn On Parking P'}
+                  </Text>}
+            </TouchableOpacity>
+            {isPActive && currentPosition && (
+              <TouchableOpacity
+                style={[styles.shareResendBtn]}
+                onPress={() => triggerParkingSuggestion(currentPosition.latitude, currentPosition.longitude, true)}
+                disabled={loadingParking}
+              >
+                <Text style={styles.shareResendText}>Search Now</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
         {/* Share live location */}
         <View style={styles.shareCard}>
@@ -781,4 +984,62 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   summaryLbl: { fontSize: 13, color: '#888' },
   summaryVal: { fontSize: 13, fontWeight: '700', color: '#222' },
+
+  // ── Floating P button ──────────────────────────────────────────────────────
+  pBtn: {
+    position: 'absolute', bottom: 24, right: 16, zIndex: 200,
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: '#1565C0',
+    elevation: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5,
+  },
+  pBtnActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
+  pBtnText: { fontSize: 20, fontWeight: '900', color: '#1565C0', lineHeight: 24 },
+  pBtnTextActive: { color: '#fff' },
+  pBtnLiveDot: {
+    position: 'absolute', top: 5, right: 5,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: '#4CAF50', borderWidth: 1.5, borderColor: '#fff',
+  },
+
+  // ── Parking suggestion banner ──────────────────────────────────────────────
+  parkingBanner: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 150,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 16,
+    elevation: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.18, shadowRadius: 10,
+    borderTopWidth: 3, borderTopColor: '#1565C0',
+  },
+  parkingBannerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+  parkingBannerIcon: { fontSize: 28 },
+  parkingBannerTitleWrap: { flex: 1 },
+  parkingBannerTitle: { fontSize: 14, fontWeight: '800', color: '#1565C0' },
+  parkingBannerSub: { fontSize: 12, color: '#666', marginTop: 2 },
+  parkingBannerClose: { padding: 6 },
+  parkingBannerCloseText: { fontSize: 18, color: '#aaa', fontWeight: '700' },
+  parkingBannerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  parkingBannerCell: {
+    flex: 1, minWidth: '44%', backgroundColor: '#F5F7FA',
+    borderRadius: 10, padding: 10,
+  },
+  parkingCellLabel: { fontSize: 10, color: '#888', fontWeight: '600', marginBottom: 3, textTransform: 'uppercase' },
+  parkingCellValue: { fontSize: 15, fontWeight: '800', color: '#222' },
+  parkingBannerActions: { flexDirection: 'row', gap: 10 },
+  parkingNavBtn: {
+    flex: 2, backgroundColor: '#1565C0', borderRadius: 12, paddingVertical: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  parkingNavBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  parkingMoreBtn: {
+    flex: 1, backgroundColor: '#F5F7FA', borderRadius: 12, paddingVertical: 13,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#ddd',
+  },
+  parkingMoreBtnText: { color: '#555', fontWeight: '700', fontSize: 13 },
+
+  // ── Parking card (active state) ────────────────────────────────────────────
+  parkingCardActive: { borderWidth: 2, borderColor: '#1565C0' },
 });

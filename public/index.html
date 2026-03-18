@@ -165,6 +165,61 @@ input[readonly]{background:#F0F4FF;border-color:#D0DCF0}
 .m-taxi{background:#F57C00}.m-auto{background:#00796B}.m-car_bike{background:#455A64}
 /* ── Error ── */
 .err-banner{background:#FFEBEE;color:#C62828;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px}
+/* ── Parking P button (floating on map) ── */
+#p-float-btn{
+  position:absolute;bottom:14px;right:14px;z-index:50;
+  width:50px;height:50px;border-radius:50%;
+  background:#fff;border:2.5px solid #1565C0;
+  font-size:19px;font-weight:900;color:#1565C0;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 10px rgba(0,0,0,.22);transition:all .2s;
+  line-height:1;user-select:none;
+}
+#p-float-btn:hover{background:#E3F2FD}
+#p-float-btn.active{background:#1565C0;color:#fff;border-color:#1565C0}
+#p-float-btn .p-live-dot{
+  position:absolute;top:5px;right:5px;
+  width:10px;height:10px;border-radius:50%;
+  background:#4CAF50;border:2px solid #fff;display:none;
+}
+#p-float-btn.active .p-live-dot{display:block}
+/* ── Parking suggestion banner ── */
+#parking-banner{
+  position:fixed;bottom:0;left:0;right:0;z-index:800;
+  background:#fff;border-top:3px solid #1565C0;
+  border-radius:20px 20px 0 0;
+  padding:18px 16px 20px;
+  box-shadow:0 -4px 24px rgba(0,0,0,.16);
+  transform:translateY(110%);
+  transition:transform .35s cubic-bezier(.33,1,.68,1);
+  max-width:700px;margin:0 auto;
+}
+#parking-banner.visible{transform:translateY(0)}
+.pb-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.pb-icon{font-size:28px}
+.pb-title-wrap{flex:1}
+.pb-title{font-size:15px;font-weight:800;color:#1565C0}
+.pb-subtitle{font-size:12px;color:#666;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb-close{background:none;border:none;font-size:22px;color:#aaa;cursor:pointer;padding:4px;line-height:1}
+.pb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.pb-cell{background:#F5F7FA;border-radius:10px;padding:10px 12px}
+.pb-cell-lbl{font-size:10px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.pb-cell-val{font-size:15px;font-weight:800;color:#222}
+.pb-actions{display:flex;gap:10px}
+.pb-nav-btn{flex:2;background:#1565C0;color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:700;cursor:pointer}
+.pb-nav-btn:hover{background:#0D47A1}
+.pb-more-btn{flex:1;background:#F5F7FA;color:#555;border:1.5px solid #ddd;border-radius:11px;padding:13px;font-size:13px;font-weight:700;cursor:pointer}
+.pb-more-btn:hover{background:#E3F2FD;color:#1565C0;border-color:#1565C0}
+/* tracking P card */
+.p-card{background:#E3F2FD;border-radius:12px;padding:14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;border:1.5px solid #BBDEFB}
+.p-card.active{background:#1565C0;border-color:#1565C0}
+.p-card-text{flex:1}
+.p-card-title{font-size:14px;font-weight:800;color:#1565C0;margin-bottom:2px}
+.p-card.active .p-card-title{color:#fff}
+.p-card-sub{font-size:12px;color:#555}
+.p-card.active .p-card-sub{color:rgba(255,255,255,.8)}
+.p-toggle-btn{background:#1565C0;color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.p-card.active .p-toggle-btn{background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.5)}
 /* ── Responsive ── */
 @media(max-width:600px){
   header h1{font-size:17px}
@@ -205,6 +260,11 @@ input[readonly]{background:#F0F4FF;border-color:#D0DCF0}
 <div id="map-wrap" style="display:block">
   <div id="map"></div>
   <div class="map-hint" id="map-hint">📍 Tap map to set location</div>
+  <!-- 🅿️ Parking P button -->
+  <button id="p-float-btn" onclick="togglePButton()" title="Find parking near your destination">
+    🅿
+    <span class="p-live-dot"></span>
+  </button>
 </div>
 
 <!-- PLAN TAB -->
@@ -1176,6 +1236,15 @@ function renderTracking() {
           ${isLast ? '🏁 Arrive' : '✅ Done · Next: '+MODE_ICONS[nextLeg?.mode]+' '+MODE_LABELS[nextLeg?.mode]}
         </button>
       </div>
+      <!-- 🅿️ Parking P card -->
+      <div class="p-card ${pBtnActive ? 'active' : ''}" id="p-tracking-card">
+        <div style="font-size:28px">🅿️</div>
+        <div class="p-card-text">
+          <div class="p-card-title">${pBtnActive ? 'Parking Mode Active' : 'Find Parking Near Destination'}</div>
+          <div class="p-card-sub">${pBtnActive ? 'Will auto-suggest at 70% of last leg. Tap P on map anytime.' : 'Activate to get real-time parking suggestions as you approach.'}</div>
+        </div>
+        <button class="p-toggle-btn" onclick="togglePButton()">${pBtnActive ? 'Turn Off' : 'Turn On'}</button>
+      </div>
       <div class="sum-grid">
         <div class="sum-item"><div class="sum-lbl">Cost</div><div class="sum-val">₹${r.totalCost}</div></div>
         <div class="sum-item"><div class="sum-lbl">Est. Time</div><div class="sum-val">${r.totalDurationMins} min</div></div>
@@ -1200,6 +1269,15 @@ function tickElapsed(leg) {
   if(el('leg-pct'))    el('leg-pct').textContent    = pct + '%';
   if(el('prog-fill'))  el('prog-fill').style.width  = pct + '%';
   if(el('prog-txt'))   el('prog-txt').textContent   = pct + '% of this leg';
+  // 🅿️ Auto-trigger parking when P is on, last leg, 70% elapsed
+  if (pBtnActive && selectedRoute) {
+    const isLast = trackingState.legIndex === selectedRoute.legs.length - 1;
+    if (isLast && pct >= 70) {
+      const lat = currentGpsPos?.lat || endLoc?.lat;
+      const lng = currentGpsPos?.lng || endLoc?.lng;
+      if (lat) triggerParkingSearch(lat, lng, false);
+    }
+  }
 }
 
 function tickCountdown(leg) {
@@ -1384,6 +1462,202 @@ window.addEventListener('load', () => {
 document.addEventListener('click', e => {
   if (!e.target.closest('.sug-wrap')) document.querySelectorAll('.suggestions').forEach(s => s.style.display='none');
 });
+
+// ── 🅿️ PARKING P BUTTON ──────────────────────────────────────────────────────
+
+let pBtnActive = false;
+let parkingCooldown = false;
+let parkingAutoTriggered = false;
+let currentGpsPos = null;   // kept in sync whenever GPS is acquired
+let _nearestParking = null; // store for navigate button
+
+// Keep GPS position in sync (hook into existing GPS calls)
+const _origGeoCb = window._geoCbHook;
+function _storeGpsPos(lat, lng) { currentGpsPos = { lat, lng }; }
+
+// Override navigator.geolocation calls to also capture position
+(function patchGeo() {
+  const orig = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+  navigator.geolocation.getCurrentPosition = function(success, error, opts) {
+    return orig(pos => {
+      _storeGpsPos(pos.coords.latitude, pos.coords.longitude);
+      success(pos);
+    }, error, opts);
+  };
+})();
+
+function togglePButton() {
+  pBtnActive = !pBtnActive;
+  const btn = document.getElementById('p-float-btn');
+  btn.classList.toggle('active', pBtnActive);
+
+  if (pBtnActive) {
+    // Manual search: use GPS or destination coords
+    const searchLat = currentGpsPos?.lat || endLoc?.lat;
+    const searchLng = currentGpsPos?.lng || endLoc?.lng;
+    if (!searchLat) {
+      alert('Please detect your GPS location first, or set a destination on the map.');
+      pBtnActive = false;
+      btn.classList.remove('active');
+      return;
+    }
+    triggerParkingSearch(searchLat, searchLng, true);
+  } else {
+    hideParkingBanner();
+  }
+}
+
+async function triggerParkingSearch(lat, lng, manual = false) {
+  if (!manual && parkingCooldown) return;
+  if (!manual && parkingAutoTriggered) return;
+  parkingCooldown = true;
+  if (!manual) parkingAutoTriggered = true;
+  setTimeout(() => { parkingCooldown = false; }, 120000);
+
+  const btn = document.getElementById('p-float-btn');
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="spin" style="width:18px;height:18px;border-width:2.5px"></span>';
+  btn.disabled = true;
+
+  try {
+    // Fetch parking via Park As You Desire API (server-side OSM query, no API key needed)
+    const radius = 1000;
+    const res = await fetch(
+      `https://park-as-you-desire.onrender.com/api/parkings/nearby?lat=${lat}&lng=${lng}&radius=${radius}`,
+      { signal: AbortSignal.timeout(15000) }
+    );
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'PAYD API error');
+
+    const spots = (json.data || [])
+      .map(p => ({
+        id: p.id, lat: p.lat, lng: p.lng,
+        name: p.name, address: p.address,
+        costPerHour: p.costPerHour,
+        isPrivate: p.isPrivate,
+        distance: p.distance,
+      }))
+      .filter(p => p.lat && p.lng)
+      .sort((a, b) => a.distance - b.distance);
+
+    if (!spots.length) {
+      if (manual) alert('No parking spots found within 1 km. Try closer to your destination.');
+      return;
+    }
+
+    const nearest = spots[0];
+    _nearestParking = nearest;
+
+    // Try OSRM route
+    let routeInfo = null;
+    try {
+      const routeRes = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${lng},${lat};${nearest.lng},${nearest.lat}?overview=false`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      const rd = await routeRes.json();
+      if (rd.code === 'Ok' && rd.routes?.[0]) routeInfo = rd.routes[0];
+    } catch (_) {}
+
+    // Format values
+    const distM = nearest.distance * 1000;
+    const distText = distM < 1000 ? `${Math.round(distM)} m` : `${nearest.distance.toFixed(1)} km`;
+    const rateText = nearest.costPerHour === 0 ? 'Free / Unknown'
+      : nearest.costPerHour / 60 < 0.1 ? `£${(nearest.costPerHour/60).toFixed(2)}/min`
+      : `£${nearest.costPerHour.toFixed(2)}/hr`;
+    const etaText = routeInfo
+      ? (routeInfo.duration < 60 ? '< 1 min' : `${Math.round(routeInfo.duration / 60)} min`)
+      : '—';
+
+    // Populate and show banner
+    document.getElementById('pb-name').textContent   = nearest.name;
+    document.getElementById('pb-address').textContent = nearest.address;
+    document.getElementById('pb-rate').textContent    = rateText;
+    document.getElementById('pb-dist').textContent    = distText;
+    document.getElementById('pb-eta').textContent     = etaText;
+    document.getElementById('pb-access').textContent  = nearest.isPrivate ? 'Private' : 'Public';
+    showParkingBanner();
+
+    // Add parking marker on map
+    if (mainMap) {
+      const pIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:30px;height:30px;background:#1565C0;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,.4)"><span style="display:block;transform:rotate(45deg);text-align:center;line-height:26px;font-size:11px;font-weight:bold;color:white">P</span></div>`,
+        iconSize: [30, 30], iconAnchor: [15, 30],
+      });
+      L.marker([nearest.lat, nearest.lng], { icon: pIcon })
+        .addTo(mainMap)
+        .bindPopup(`<b>${nearest.name}</b><br>${rateText}<br><small>${nearest.address}</small>`)
+        .openPopup();
+    }
+
+  } catch (err) {
+    if (manual) alert('Could not fetch parking data. Check your connection.');
+  } finally {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+  }
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371, toR = d => d * Math.PI / 180;
+  const dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function showParkingBanner() {
+  document.getElementById('parking-banner').classList.add('visible');
+}
+
+function hideParkingBanner() {
+  document.getElementById('parking-banner').classList.remove('visible');
+}
+
+function navigateToParking() {
+  if (!_nearestParking) return;
+  const { lat, lng, name } = _nearestParking;
+  const url = `https://maps.google.com/?daddr=${lat},${lng}&q=${encodeURIComponent(name)}`;
+  window.open(url, '_blank');
+}
+
+function findAnotherParking() {
+  hideParkingBanner();
+  parkingAutoTriggered = false;
+  const lat = currentGpsPos?.lat || endLoc?.lat;
+  const lng = currentGpsPos?.lng || endLoc?.lng;
+  if (lat) setTimeout(() => triggerParkingSearch(lat, lng, true), 300);
+}
+
+// Auto-trigger hook — called by tickElapsed (see below in tickElapsed function)
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.sug-wrap')) document.querySelectorAll('.suggestions').forEach(s => s.style.display='none');
+});
 </script>
+
+<!-- 🅿️ Parking suggestion banner -->
+<div id="parking-banner">
+  <div class="pb-header">
+    <span class="pb-icon">🅿️</span>
+    <div class="pb-title-wrap">
+      <div class="pb-title">Parking Found Near Destination</div>
+      <div class="pb-subtitle" id="pb-name">—</div>
+    </div>
+    <button class="pb-close" onclick="hideParkingBanner(); pBtnActive=false; document.getElementById('p-float-btn').classList.remove('active')">✕</button>
+  </div>
+  <div class="pb-grid">
+    <div class="pb-cell"><div class="pb-cell-lbl">💰 Rate</div><div class="pb-cell-val" id="pb-rate">—</div></div>
+    <div class="pb-cell"><div class="pb-cell-lbl">📏 Distance</div><div class="pb-cell-val" id="pb-dist">—</div></div>
+    <div class="pb-cell"><div class="pb-cell-lbl">⏱ Drive time</div><div class="pb-cell-val" id="pb-eta">—</div></div>
+    <div class="pb-cell"><div class="pb-cell-lbl">🔓 Access</div><div class="pb-cell-val" id="pb-access">—</div></div>
+  </div>
+  <div style="font-size:12px;color:#888;margin-bottom:10px" id="pb-address"></div>
+  <div class="pb-actions">
+    <button class="pb-nav-btn" onclick="navigateToParking()">🗺 Navigate to Parking</button>
+    <button class="pb-more-btn" onclick="findAnotherParking()">🔄 Find Another</button>
+  </div>
+</div>
+
 </body>
 </html>
