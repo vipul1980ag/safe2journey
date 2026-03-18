@@ -14,6 +14,7 @@ import TrackingScreen    from './src/screens/TrackingScreen';
 import MapScreen         from './src/screens/MapScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
 import SafetySetupScreen from './src/screens/SafetySetupScreen';
+import AIScreen          from './src/screens/AIScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -38,6 +39,7 @@ export default function App() {
               <Stack.Screen name="Map"         component={MapScreen}         options={{ title: 'Route Map' }} />
               <Stack.Screen name="History"     component={HistoryScreen}     options={{ title: 'Journey History' }} />
               <Stack.Screen name="SafetySetup" component={SafetySetupScreen} options={{ title: 'Safety Setup' }} />
+              <Stack.Screen name="AI"          component={AIScreen}          options={{ title: '🤖 AI Assistant' }} />
             </Stack.Navigator>
           </NavigationContainer>
         </SafetyProvider>

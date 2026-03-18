@@ -233,6 +233,28 @@ input[readonly]{background:#F0F4FF;border-color:#D0DCF0}
   .sched-row{flex-direction:column}
   .elapsed-row{gap:12px}
 }
+/* ── AI Chat ── */
+#tab-ai .content{padding-bottom:80px}
+.ai-intro{background:linear-gradient(135deg,#E8EAF6,#E3F2FD);border-radius:14px;padding:16px;margin-bottom:14px;text-align:center}
+.ai-intro-icon{font-size:36px;margin-bottom:6px}
+.ai-intro-title{font-size:16px;font-weight:800;color:#1565C0;margin-bottom:4px}
+.ai-intro-sub{font-size:12px;color:#666}
+.ai-quick-btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.ai-quick-btn{background:#fff;border:1.5px solid #BBDEFB;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;color:#1565C0;cursor:pointer;transition:all .2s;white-space:nowrap}
+.ai-quick-btn:hover{background:#E3F2FD;border-color:#1565C0}
+.ai-messages{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;min-height:200px}
+.ai-msg{max-width:85%;padding:12px 14px;border-radius:14px;font-size:13px;line-height:1.55}
+.ai-msg.user{align-self:flex-end;background:#1565C0;color:#fff;border-bottom-right-radius:4px}
+.ai-msg.assistant{align-self:flex-start;background:#fff;color:#222;border:1.5px solid #E0E0E0;border-bottom-left-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.ai-msg.thinking{background:#F5F5F5;color:#888;font-style:italic}
+.ai-input-row{display:flex;gap:8px;position:sticky;bottom:0;background:#F0F4FF;padding:10px 0 4px}
+.ai-input-row input{flex:1;padding:12px 14px;border:1.5px solid #BBDEFB;border-radius:22px;font-size:14px;outline:none;background:#fff}
+.ai-input-row input:focus{border-color:#1565C0}
+.ai-send-btn{width:46px;height:46px;border-radius:50%;background:#1565C0;border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ai-send-btn:disabled{background:#90CAF9;cursor:not-allowed}
+.ai-route-analysis{background:#F8FBFF;border:1.5px solid #BBDEFB;border-radius:12px;padding:14px;margin-top:10px}
+.ai-route-analysis h4{font-size:12px;font-weight:700;color:#1565C0;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+.ai-route-analysis p{font-size:13px;color:#333;line-height:1.55}
 </style>
 </head>
 <body>
@@ -254,6 +276,7 @@ input[readonly]{background:#F0F4FF;border-color:#D0DCF0}
   <button class="tab active" id="tbtn-plan"    onclick="switchTab('plan',this)">🗺 Plan Journey</button>
   <button class="tab"        id="tbtn-track"   onclick="switchTab('track',this)" style="display:none">🧭 Track</button>
   <button class="tab"        id="tbtn-history" onclick="switchTab('history',this)">🗂 History</button>
+  <button class="tab"        id="tbtn-ai"      onclick="switchTab('ai',this)">🤖 AI Assistant</button>
 </div>
 
 <!-- MAP (shared, always visible on Plan/Track) -->
@@ -378,6 +401,34 @@ input[readonly]{background:#F0F4FF;border-color:#D0DCF0}
 <div class="content">
   <div id="history-panel">
     <div class="empty"><div class="empty-icon">⏳</div><div class="empty-msg">Loading…</div></div>
+  </div>
+</div>
+</div>
+
+<!-- AI ASSISTANT TAB -->
+<div id="tab-ai" style="display:none">
+<div class="content">
+  <div class="ai-intro">
+    <div class="ai-intro-icon">🤖</div>
+    <div class="ai-intro-title">AI Journey Assistant</div>
+    <div class="ai-intro-sub">Ask anything about your journey, safety, or transport options</div>
+  </div>
+
+  <div class="ai-quick-btns">
+    <button class="ai-quick-btn" onclick="aiQuickSend('What transport modes are available near me?')">🚌 What modes near me?</button>
+    <button class="ai-quick-btn" onclick="aiQuickSend('Give me safety tips for solo night travel')">🌙 Night travel safety</button>
+    <button class="ai-quick-btn" onclick="aiQuickSend('How does the safety check-in feature work?')">🛡 Safety check-ins</button>
+    <button class="ai-quick-btn" onclick="aiQuickSend('My bus was cancelled. What should I do?')">🚌 Bus cancelled</button>
+    <button class="ai-quick-btn" onclick="aiQuickSend('How do I find cheap routes?')">💰 Cheapest routes</button>
+  </div>
+
+  <div class="ai-messages" id="ai-messages">
+    <div class="ai-msg assistant">👋 Hi! I'm your Safe2Journey AI assistant. Ask me to help plan your journey, get safety tips, or understand your route options.</div>
+  </div>
+
+  <div class="ai-input-row">
+    <input id="ai-input" placeholder="Ask about your journey…" onkeydown="if(event.key==='Enter')sendAiMsg()" />
+    <button class="ai-send-btn" id="ai-send-btn" onclick="sendAiMsg()">➤</button>
   </div>
 </div>
 </div>
@@ -1184,6 +1235,7 @@ function selectRoute(idx) {
   selectedRoute = routes[idx];
   trackingState = {legIndex:0, startTime:Date.now(), elapsedTimer:null, cdTimer:null};
   drawRouteOnMap(selectedRoute, planData);
+  aiAnalyzeRoute(selectedRoute);
   document.getElementById('tbtn-track').style.display = 'inline-block';
   switchTab('track', document.getElementById('tbtn-track'));
   renderTracking();
@@ -1391,14 +1443,14 @@ async function loadHistory() {
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
-  ['plan','track','history'].forEach(t => {
+  ['plan','track','history','ai'].forEach(t => {
     document.getElementById('tab-'+t).style.display = 'none';
     const b = document.getElementById('tbtn-'+t);
     if (b) b.classList.remove('active');
   });
   document.getElementById('tab-'+name).style.display = 'block';
   if (btn) btn.classList.add('active');
-  document.getElementById('map-wrap').style.display = (name==='history') ? 'none' : 'block';
+  document.getElementById('map-wrap').style.display = (name==='history'||name==='ai') ? 'none' : 'block';
   if (name === 'history') loadHistory();
   // Resize map after show
   setTimeout(() => { if(mainMap) mainMap.invalidateSize(); }, 100);
@@ -1634,6 +1686,117 @@ function findAnotherParking() {
 document.addEventListener('click', e => {
   if (!e.target.closest('.sug-wrap')) document.querySelectorAll('.suggestions').forEach(s => s.style.display='none');
 });
+
+// ── AI ASSISTANT ──────────────────────────────────────────────────────────────
+let aiHistory = [];
+
+function aiAddMsg(role, text) {
+  aiHistory.push({ role, content: text });
+  const box = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = 'ai-msg ' + role;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function aiRemoveThinking(el) {
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+
+async function sendAiMsg() {
+  const input = document.getElementById('ai-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  document.getElementById('ai-send-btn').disabled = true;
+
+  aiAddMsg('user', text);
+  const thinking = aiAddMsg('thinking', '✦ Thinking…');
+
+  // Build context from current journey state
+  const context = {};
+  if (startLoc) context.start = startLoc;
+  if (endLoc)   context.end = endLoc;
+  if (planData && planData.routes && planData.routes.length > 0) {
+    context.routesFound = planData.routes.length;
+    context.bestRoute = {
+      cost: planData.routes[0].totalCost,
+      durationMins: planData.routes[0].totalDurationMins,
+      modes: planData.routes[0].legs.map(l => l.mode),
+    };
+  }
+  if (selectedRoute) context.selectedRoute = {
+    modes: selectedRoute.legs.map(l => l.mode),
+    cost: selectedRoute.totalCost,
+    durationMins: selectedRoute.totalDurationMins,
+  };
+
+  try {
+    const r = await fetch(`${API}/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: 'Bearer ' + authToken } : {}) },
+      body: JSON.stringify({
+        messages: aiHistory.filter(m => m.role !== 'thinking'),
+        context: Object.keys(context).length ? context : null,
+      }),
+    });
+    const data = await r.json();
+    aiRemoveThinking(thinking);
+    if (data.error) {
+      aiAddMsg('assistant', '⚠️ ' + data.error);
+    } else {
+      aiAddMsg('assistant', data.reply);
+    }
+  } catch(e) {
+    aiRemoveThinking(thinking);
+    aiAddMsg('assistant', '⚠️ Could not reach AI service. Is the server running?');
+  } finally {
+    document.getElementById('ai-send-btn').disabled = false;
+    document.getElementById('ai-input').focus();
+  }
+}
+
+function aiQuickSend(text) {
+  document.getElementById('ai-input').value = text;
+  sendAiMsg();
+}
+
+// Analyze a route with AI (called when user selects a route)
+async function aiAnalyzeRoute(route) {
+  if (!route) return;
+  const timeOfDay = new Date().getHours() < 6 ? 'very early morning' :
+    new Date().getHours() < 12 ? 'morning' :
+    new Date().getHours() < 18 ? 'afternoon' :
+    new Date().getHours() < 22 ? 'evening' : 'night';
+  try {
+    const r = await fetch(`${API}/ai/analyze-route`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        route,
+        startName: startLoc?.name,
+        endName: endLoc?.name,
+        timeOfDay,
+      }),
+    });
+    const data = await r.json();
+    if (data.analysis) {
+      // inject analysis into the selected route card
+      let el = document.getElementById('ai-route-analysis-box');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'ai-route-analysis-box';
+        el.className = 'ai-route-analysis';
+        el.innerHTML = '<h4>🤖 AI Insights</h4><p id="ai-route-analysis-text"></p>';
+        const panel = document.getElementById('plan-results');
+        if (panel) panel.prepend(el);
+      }
+      document.getElementById('ai-route-analysis-text').textContent = data.analysis;
+    }
+  } catch(e) { /* silent fail for analysis */ }
+}
 </script>
 
 <!-- 🅿️ Parking suggestion banner -->

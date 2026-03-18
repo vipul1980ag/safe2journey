@@ -73,6 +73,17 @@ export function pushTrackPosition(payload) {
   return request('/track', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+// AI Assistant
+export function aiChat(messages, context) {
+  return request('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, context }) });
+}
+export function aiAnalyzeRoute(route, startName, endName, timeOfDay) {
+  return request('/ai/analyze-route', { method: 'POST', body: JSON.stringify({ route, startName, endName, timeOfDay }) });
+}
+export function aiSafetyAdvice(situation, location, timeOfDay) {
+  return request('/ai/safety-advice', { method: 'POST', body: JSON.stringify({ situation, location, timeOfDay }) });
+}
+
 // Geocoding (proxied through server to avoid Nominatim blocking mobile clients)
 export function geocodeSearch(query) {
   return request(`/journey/geocode?q=${encodeURIComponent(query)}`);

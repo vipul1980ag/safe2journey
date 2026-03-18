@@ -18,6 +18,7 @@ app.use('/api/transport', require('./routes/transport'));
 app.use('/api/admin',     require('./routes/admin'));
 app.use('/api/safety',    require('./routes/safety'));
 app.use('/api/track',     require('./routes/track'));
+app.use('/api/ai',        require('./routes/ai'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 

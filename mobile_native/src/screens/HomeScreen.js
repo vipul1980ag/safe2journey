@@ -145,6 +145,13 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.historyArrow}>›</Text>
       </TouchableOpacity>
 
+      {/* AI Assistant button */}
+      <TouchableOpacity style={styles.aiBtn} onPress={() => navigation.navigate('AI')}>
+        <Text style={styles.historyIcon}>🤖</Text>
+        <Text style={styles.historyText}>AI Journey Assistant</Text>
+        <Text style={styles.historyArrow}>›</Text>
+      </TouchableOpacity>
+
       {/* Transport modes */}
       <View style={styles.modesRow}>
         {['🚌', '🚇', '🚶', '🚕', '🛺', '🚗'].map((icon, i) => (
@@ -208,7 +215,12 @@ const styles = StyleSheet.create({
 
   historyBtn: {
     width: '100%', backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8,
+  },
+  aiBtn: {
+    width: '100%', backgroundColor: 'rgba(21,101,192,0.35)',
     borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18,
+    borderWidth: 1, borderColor: 'rgba(144,202,249,0.4)',
   },
   historyIcon: { fontSize: 18 },
   historyText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
