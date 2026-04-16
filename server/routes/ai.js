@@ -26,32 +26,63 @@ Tell them what to enter in the Plan Journey tab, or explain how to get the best 
 
 Be concise, friendly, and practical. No more than 3-4 short paragraphs per response.`;
 
-// POST /api/ai/chat — conversational AI assistant
+// POST /api/ai/chat — streaming conversational AI with extended thinking
 router.post('/chat', async (req, res) => {
   const { messages, context } = req.body;
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages array required' });
   }
 
-  try {
-    const systemWithContext = context
-      ? `${SYSTEM_PROMPT}\n\nUser's current journey context:\n${JSON.stringify(context, null, 2)}`
-      : SYSTEM_PROMPT;
+  const systemWithContext = context
+    ? `${SYSTEM_PROMPT}\n\nUser's current journey context:\n${JSON.stringify(context, null, 2)}`
+    : SYSTEM_PROMPT;
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 512,
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Clean up if client disconnects
+  let closed = false;
+  req.on('close', () => { closed = true; });
+
+  try {
+    const stream = client.messages.stream({
+      model: 'claude-opus-4-6',
+      max_tokens: 8000,
+      thinking: { type: 'enabled', budget_tokens: 5000 },
       system: systemWithContext,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     });
 
-    res.json({ reply: response.content[0].text });
+    for await (const event of stream) {
+      if (closed) break;
+
+      if (event.type === 'content_block_start') {
+        if (event.content_block.type === 'thinking') {
+          res.write(`data: ${JSON.stringify({ type: 'thinking_start' })}\n\n`);
+        } else if (event.content_block.type === 'text') {
+          res.write(`data: ${JSON.stringify({ type: 'text_start' })}\n\n`);
+        }
+      } else if (event.type === 'content_block_delta') {
+        if (event.delta.type === 'text_delta' && event.delta.text) {
+          res.write(`data: ${JSON.stringify({ type: 'text', text: event.delta.text })}\n\n`);
+        }
+      }
+    }
+
+    if (!closed) {
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    }
   } catch (e) {
     console.error('[ai/chat]', e.message);
-    const msg = e.status === 401
-      ? 'Invalid API key. Set ANTHROPIC_API_KEY in server environment.'
-      : 'AI service temporarily unavailable.';
-    res.status(500).json({ error: msg });
+    if (!closed) {
+      const msg = e.status === 401
+        ? 'Invalid API key. Set ANTHROPIC_API_KEY in server environment.'
+        : 'AI service temporarily unavailable.';
+      res.write(`data: ${JSON.stringify({ type: 'error', message: msg })}\n\n`);
+      res.end();
+    }
   }
 });
 

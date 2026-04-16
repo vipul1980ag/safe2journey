@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
-import { aiChat } from '../services/api';
+import { aiChatStream } from '../services/api';
 
 const QUICK_PROMPTS = [
   { label: '🚌 Transport near me?', text: 'What transport modes are typically available for city travel?' },
@@ -22,32 +22,57 @@ export default function AIScreen() {
   const listRef = useRef(null);
 
   const apiHistory = () =>
-    messages.filter(m => m.role !== 'thinking').map(m => ({ role: m.role, content: m.text }));
+    messages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.text }));
 
   async function send(text) {
     const msgText = text || input.trim();
     if (!msgText || loading) return;
     setInput('');
-
-    const userMsg = { id: Date.now().toString(), role: 'user', text: msgText };
-    const thinkingMsg = { id: 'thinking', role: 'thinking', text: '✦ Thinking…' };
-
-    setMessages(prev => [...prev, userMsg, thinkingMsg]);
     setLoading(true);
 
+    const userMsg = { id: Date.now().toString(), role: 'user', text: msgText };
+    const thinkingId = 'thinking';
+    const streamId = Date.now().toString() + 'r';
+
+    setMessages(prev => [
+      ...prev,
+      userMsg,
+      { id: thinkingId, role: 'thinking', text: '✦ Reasoning about your journey…' },
+    ]);
+
+    const history = [...apiHistory(), { role: 'user', content: msgText }];
+    let streamStarted = false;
+
     try {
-      const history = [...apiHistory(), { role: 'user', content: msgText }];
-      const data = await aiChat(history, null);
+      await aiChatStream(history, null, (event) => {
+        if (event.type === 'thinking_start') {
+          // Already showing the thinking bubble — no extra action needed
+        } else if (event.type === 'text_start') {
+          // Replace thinking bubble with live streaming bubble
+          streamStarted = true;
+          setMessages(prev => [
+            ...prev.filter(m => m.id !== thinkingId),
+            { id: streamId, role: 'assistant', text: '' },
+          ]);
+        } else if (event.type === 'text') {
+          setMessages(prev => prev.map(m =>
+            m.id === streamId ? { ...m, text: m.text + event.text } : m
+          ));
+        } else if (event.type === 'error') {
+          setMessages(prev => [
+            ...prev.filter(m => m.id !== thinkingId),
+            { id: streamId, role: 'assistant', text: `⚠️ ${event.message}` },
+          ]);
+        }
+      });
+    } catch {
       setMessages(prev => [
-        ...prev.filter(m => m.id !== 'thinking'),
-        { id: Date.now().toString() + 'r', role: 'assistant', text: data.reply },
-      ]);
-    } catch (e) {
-      setMessages(prev => [
-        ...prev.filter(m => m.id !== 'thinking'),
-        { id: Date.now().toString() + 'e', role: 'assistant', text: '⚠️ Could not reach AI service. Is the server running?' },
+        ...prev.filter(m => m.id !== thinkingId),
+        { id: streamId, role: 'assistant', text: '⚠️ Could not reach AI service. Is the server running?' },
       ]);
     } finally {
+      // Safety cleanup — ensure thinking bubble is always removed
+      setMessages(prev => prev.filter(m => m.id !== thinkingId));
       setLoading(false);
     }
   }
@@ -62,6 +87,7 @@ export default function AIScreen() {
     }
     return (
       <View style={[styles.aiBubble, item.role === 'thinking' && styles.thinkingBubble]}>
+        {item.role === 'thinking' && <ActivityIndicator size="small" color="#1565C0" style={styles.thinkingSpinner} />}
         <Text style={[styles.aiText, item.role === 'thinking' && styles.thinkingText]}>{item.text}</Text>
       </View>
     );
@@ -99,6 +125,11 @@ export default function AIScreen() {
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
       />
 
+      {/* Model badge */}
+      <View style={styles.modelBadge}>
+        <Text style={styles.modelBadgeText}>claude-opus-4-6 · extended thinking</Text>
+      </View>
+
       {/* Input row */}
       <View style={styles.inputRow}>
         <TextInput
@@ -135,7 +166,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#BBDEFB',
   },
   quickText: { fontSize: 12, fontWeight: '600', color: '#1565C0' },
-  msgList: { padding: 14, gap: 10, paddingBottom: 20 },
+  msgList: { padding: 14, gap: 10, paddingBottom: 4 },
   userBubble: {
     alignSelf: 'flex-end', backgroundColor: '#1565C0',
     borderRadius: 14, borderBottomRightRadius: 4,
@@ -149,9 +180,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#E0E0E0',
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
-  thinkingBubble: { backgroundColor: '#F5F5F5', borderColor: '#E0E0E0' },
-  aiText: { color: '#222', fontSize: 14, lineHeight: 22 },
-  thinkingText: { color: '#888', fontStyle: 'italic' },
+  thinkingBubble: { backgroundColor: '#EFF8FF', borderColor: '#BBDEFB', flexDirection: 'row', alignItems: 'center', gap: 8 },
+  thinkingSpinner: { marginRight: 4 },
+  aiText: { color: '#222', fontSize: 14, lineHeight: 22, flex: 1 },
+  thinkingText: { color: '#1565C0', fontStyle: 'italic', fontSize: 13 },
+  modelBadge: {
+    alignItems: 'center', paddingVertical: 4,
+    backgroundColor: '#F0F4FF', borderTopWidth: 1, borderTopColor: '#E0E0E0',
+  },
+  modelBadgeText: { fontSize: 10, color: '#90A4AE', letterSpacing: 0.3 },
   inputRow: {
     flexDirection: 'row', gap: 8, padding: 12,
     backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E0E0E0',

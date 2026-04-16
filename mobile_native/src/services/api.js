@@ -73,9 +73,39 @@ export function pushTrackPosition(payload) {
   return request('/track', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-// AI Assistant
-export function aiChat(messages, context) {
-  return request('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, context }) });
+// AI Assistant — streaming SSE (calls onEvent for each chunk, returns when done)
+export async function aiChatStream(messages, context, onEvent) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
+
+  const res = await fetch(`${BASE_URL}/ai/chat`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ messages, context }),
+  });
+
+  if (!res.ok) throw new Error('Request failed');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep incomplete last line
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try { onEvent(JSON.parse(data)); } catch {}
+      }
+    }
+  }
 }
 export function aiAnalyzeRoute(route, startName, endName, timeOfDay) {
   return request('/ai/analyze-route', { method: 'POST', body: JSON.stringify({ route, startName, endName, timeOfDay }) });
