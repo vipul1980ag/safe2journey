@@ -105,19 +105,26 @@ function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
   function dur(speed) { return Math.ceil((distKm / speed) * 60); }
   function fare(mode) { return offlineFare(mode, distKm, region); }
 
+  function leg(mode, from, to, extra = {}) {
+    return { mode, from, to, distanceKm: distKm, cost: fare(mode), durationMins: dur(mode === 'taxi' ? 30 : mode === 'car_bike' ? 35 : mode === 'auto' ? 25 : mode === 'bus' ? 20 : 40), currencySymbol, ...extra };
+  }
+  function mkRoute(label, c, legMode, durationMins, extra = {}) {
+    const f = fare(legMode);
+    return { case: c, label, currencySymbol, legs: [{ mode: legMode, from: sName, to: eName, distanceKm: distKm, cost: f, durationMins, currencySymbol }], totalCost: f, totalDurationMins: durationMins, totalDistanceKm: distKm, ...extra };
+  }
   const routes = [
-    { case:0, label:'Taxi / Cab',  legs:[{mode:'taxi',    from:sName,to:eName,distanceKm:distKm,cost:fare('taxi'),    durationMins:dur(30)}], totalCost:fare('taxi'),     totalDurationMins:dur(30), totalDistanceKm:distKm },
-    { case:0, label:'Car / Bike',  legs:[{mode:'car_bike',from:sName,to:eName,distanceKm:distKm,cost:fare('car_bike'),durationMins:dur(35)}], totalCost:fare('car_bike'), totalDurationMins:dur(35), totalDistanceKm:distKm },
+    mkRoute('Taxi / Cab',  0, 'taxi',     dur(30)),
+    mkRoute('Car / Bike',  0, 'car_bike', dur(35)),
   ];
   if (showAuto) {
-    routes.push({ case:0, label:`Direct ${autoName}`, legs:[{mode:'auto',from:sName,to:eName,distanceKm:distKm,cost:fare('auto'),durationMins:dur(25)}], totalCost:fare('auto'), totalDurationMins:dur(25), totalDistanceKm:distKm });
+    routes.push(mkRoute(`Direct ${autoName}`, 0, 'auto', dur(25)));
   }
   if (maxModes >= 1) {
-    routes.push({ case:1, label:'Direct Bus',   legs:[{mode:'bus',  from:sName,to:eName,distanceKm:distKm,cost:fare('bus'),  durationMins:dur(20),nextScheduled:null,waitMinutes:8,frequency:15}], totalCost:fare('bus'),  totalDurationMins:dur(20)+8, totalDistanceKm:distKm });
-    routes.push({ case:1, label:'Direct Metro', legs:[{mode:'metro',from:sName,to:eName,distanceKm:distKm,cost:fare('metro'),durationMins:dur(40),nextScheduled:null,waitMinutes:3,frequency:5}],  totalCost:fare('metro'), totalDurationMins:dur(40)+3, totalDistanceKm:distKm });
+    routes.push({ case:1, label:'Direct Bus',   currencySymbol, legs:[{mode:'bus',  from:sName,to:eName,distanceKm:distKm,cost:fare('bus'),  durationMins:dur(20),nextScheduled:null,waitMinutes:8,frequency:15,currencySymbol}], totalCost:fare('bus'),  totalDurationMins:dur(20)+8, totalDistanceKm:distKm });
+    routes.push({ case:1, label:'Direct Metro', currencySymbol, legs:[{mode:'metro',from:sName,to:eName,distanceKm:distKm,cost:fare('metro'),durationMins:dur(40),nextScheduled:null,waitMinutes:3,frequency:5,currencySymbol}],  totalCost:fare('metro'), totalDurationMins:dur(40)+3, totalDistanceKm:distKm });
   }
   if (distKm <= 2) {
-    routes.push({ case:0, label:'Walk', legs:[{mode:'walking',from:sName,to:eName,distanceKm:distKm,cost:0,durationMins:dur(5)}], totalCost:0, totalDurationMins:dur(5), totalDistanceKm:distKm });
+    routes.push({ case:0, label:'Walk', currencySymbol, legs:[{mode:'walking',from:sName,to:eName,distanceKm:distKm,cost:0,durationMins:dur(5),currencySymbol}], totalCost:0, totalDurationMins:dur(5), totalDistanceKm:distKm });
   }
   routes.sort((a,b) => a.totalDurationMins - b.totalDurationMins);
   return { startName:sName, endName:eName, totalDistanceKm:distKm, currencySymbol, nearbyTransport:{busStops:[],metroStations:[]}, routes, journeyId:null, offline:true };

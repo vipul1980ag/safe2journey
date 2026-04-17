@@ -40,7 +40,9 @@ const MODE_LABELS = {
   air: 'Flight',
 };
 
-export default function RouteCard({ route, onSelect, currencySymbol = '₹' }) {
+export default function RouteCard({ route, onSelect, currencySymbol: propSymbol = '₹' }) {
+  // Prefer route-embedded symbol (server always sets this), fall back to prop
+  const currencySymbol = route.currencySymbol || propSymbol;
   const isMixed = route.originCurrencySymbol && route.destCurrencySymbol &&
                   route.originCurrencySymbol !== route.destCurrencySymbol;
 
