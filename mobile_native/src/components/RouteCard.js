@@ -40,14 +40,14 @@ const MODE_LABELS = {
   air: 'Flight',
 };
 
-export default function RouteCard({ route, onSelect }) {
+export default function RouteCard({ route, onSelect, currencySymbol = '₹' }) {
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.label}>{route.label}</Text>
         <View style={styles.badges}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>₹{route.totalCost}</Text>
+            <Text style={styles.badgeText}>{currencySymbol}{route.totalCost}</Text>
           </View>
           <View style={[styles.badge, styles.timeBadge]}>
             <Text style={[styles.badgeText, styles.timeBadgeText]}>{route.totalDurationMins} min</Text>
@@ -63,7 +63,7 @@ export default function RouteCard({ route, onSelect }) {
             </View>
             <View style={styles.legInfo}>
               <Text style={styles.modeName}>{MODE_LABELS[leg.mode]}</Text>
-              <Text style={styles.legDetail}>{leg.distanceKm} km · {leg.durationMins} min · ₹{leg.cost}</Text>
+              <Text style={styles.legDetail}>{leg.distanceKm} km · {leg.durationMins} min · {currencySymbol}{leg.cost}</Text>
               {leg.nextScheduled ? (
                 <Text style={styles.schedule}>Next: {leg.nextScheduled} · every {leg.frequency} min</Text>
               ) : null}

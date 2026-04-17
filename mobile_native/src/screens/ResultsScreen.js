@@ -6,6 +6,7 @@ import RouteCard from '../components/RouteCard';
 
 export default function ResultsScreen({ route, navigation }) {
   const { plan, startLat, startLng, startName, endLat, endLng, endName } = route.params;
+  const currencySymbol = plan?.currencySymbol || '₹';
   const [sortBy, setSortBy] = useState('time'); // 'time' | 'cost'
 
   const sortedRoutes = useMemo(() => {
@@ -25,6 +26,7 @@ export default function ResultsScreen({ route, navigation }) {
       endLat,
       endLng,
       endName,
+      currencySymbol,
     });
   }
 
@@ -33,6 +35,7 @@ export default function ResultsScreen({ route, navigation }) {
       selectedRoute: r,
       startName: plan.startName,
       endName: plan.endName,
+      currencySymbol,
     });
   }
 
@@ -145,7 +148,7 @@ export default function ResultsScreen({ route, navigation }) {
 
       {sortedRoutes.map((r, i) => (
         <View key={i}>
-          <RouteCard route={r} onSelect={handleSelectRoute} />
+          <RouteCard route={r} onSelect={handleSelectRoute} currencySymbol={currencySymbol} />
           <TouchableOpacity style={styles.mapBtn} onPress={() => handleViewMap(r)}>
             <Text style={styles.mapBtnText}>🗺 View Route Diagram</Text>
           </TouchableOpacity>

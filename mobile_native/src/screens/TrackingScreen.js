@@ -98,7 +98,7 @@ function ScheduleCountdown({ nextScheduled, frequency, modeName }) {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function TrackingScreen({ route, navigation }) {
-  const { selectedRoute, journeyId, startLat, startLng, endLat, endLng, endName } = route.params;
+  const { selectedRoute, journeyId, startLat, startLng, endLat, endLng, endName, currencySymbol = '₹' } = route.params;
 
   const [currentLegIndex, setCurrentLegIndex] = useState(0);
   const [trackStatus, setTrackStatus]         = useState(null);
@@ -475,7 +475,7 @@ export default function TrackingScreen({ route, navigation }) {
       const totalMins = Math.round(elapsedSecs / 60);
       stopSharing();
       if (journeyId) { try { await completeJourney(journeyId, totalMins); } catch {} }
-      Alert.alert('Journey Complete!', `You arrived in ~${totalMins} min.\nEstimated cost: ₹${selectedRoute.totalCost}`);
+      Alert.alert('Journey Complete!', `You arrived in ~${totalMins} min.\nEstimated cost: ${currencySymbol}${selectedRoute.totalCost}`);
     }
   }
 
@@ -705,7 +705,7 @@ export default function TrackingScreen({ route, navigation }) {
           <View style={styles.legStats}>
             <Text style={styles.stat}>{currentLeg?.distanceKm} km</Text>
             <Text style={styles.stat}>~{currentLeg?.durationMins} min</Text>
-            <Text style={styles.stat}>₹{currentLeg?.cost}</Text>
+            <Text style={styles.stat}>{currencySymbol}{currentLeg?.cost}</Text>
           </View>
           {currentLeg?.note && (
             <Text style={styles.legNote}>ℹ️ {currentLeg.note}</Text>
@@ -879,7 +879,7 @@ export default function TrackingScreen({ route, navigation }) {
           <Text style={styles.summaryTitle}>Journey Summary</Text>
           <View style={styles.summaryRow}><Text style={styles.summaryLbl}>Total distance</Text><Text style={styles.summaryVal}>{selectedRoute.totalDistanceKm} km</Text></View>
           <View style={styles.summaryRow}><Text style={styles.summaryLbl}>Estimated time</Text><Text style={styles.summaryVal}>{selectedRoute.totalDurationMins} min</Text></View>
-          <View style={styles.summaryRow}><Text style={styles.summaryLbl}>Estimated cost</Text><Text style={styles.summaryVal}>₹{selectedRoute.totalCost}</Text></View>
+          <View style={styles.summaryRow}><Text style={styles.summaryLbl}>Estimated cost</Text><Text style={styles.summaryVal}>{currencySymbol}{selectedRoute.totalCost}</Text></View>
           <View style={styles.summaryRow}><Text style={styles.summaryLbl}>Legs remaining</Text><Text style={styles.summaryVal}>{selectedRoute.legs.length - currentLegIndex}</Text></View>
         </View>
 

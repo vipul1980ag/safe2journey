@@ -3,56 +3,196 @@ const { fetchNearbyTransit } = require('./overpass');
 
 const MODE_SPEEDS_KMH = { bus: 20, metro: 40, walking: 5, taxi: 30, auto: 25, car_bike: 35, tram: 18, train: 80, ferry: 25, air: 700 };
 
-/**
- * Fare multiplier relative to India (INR) baseline.
- * Scales taxi, auto, train, bus, and ferry costs to locally sensible amounts.
- */
-function regionalFareMultiplier(region) {
+/** Currency symbol and code per region */
+function regionCurrency(region) {
   switch (region) {
-    case 'europe':               return 5.5;
-    case 'americas':             return 5.0;
-    case 'oceania':              return 7.0;
-    case 'east_asia':            return 3.0;
-    case 'middle_east':          return 4.5;
-    case 'africa':               return 0.9;
-    case 'southeast_asia':       return 1.1;
-    case 'russia_central_asia':  return 1.8;
+    case 'europe':              return { symbol: '€',   code: 'EUR' };
+    case 'americas':            return { symbol: '$',   code: 'USD' };
+    case 'oceania':             return { symbol: 'A$',  code: 'AUD' };
+    case 'east_asia':           return { symbol: '¥',   code: 'JPY' };
+    case 'middle_east':         return { symbol: 'AED', code: 'AED' };
+    case 'africa':              return { symbol: 'KSh', code: 'KES' };
+    case 'southeast_asia':      return { symbol: '฿',   code: 'THB' };
+    case 'russia_central_asia': return { symbol: '₽',   code: 'RUB' };
     case 'south_asia':
-    default:                     return 1.0;
+    default:                    return { symbol: '₹',   code: 'INR' };
   }
 }
 
-// Universal fare estimation — region-aware
+// Keep for backward-compat export
+function regionalFareMultiplier(region) { return 1; }
+
+/**
+ * Realistic local-currency fare estimates per region.
+ * All amounts are in the local currency (€ for Europe, $ for Americas, etc.)
+ * Short-distance trips use practical minimums (flag-fall + per-km).
+ */
 function cost(mode, distKm, region = 'south_asia') {
-  const m = regionalFareMultiplier(region);
-  switch (mode) {
-    case 'walking': return 0;
-    case 'bus':     return Math.round(Math.max(10, 10 + distKm * 2) * m);
-    case 'metro':
-    case 'tram': {
-      let base;
-      if (distKm <= 2)  base = 10;
-      else if (distKm <= 5)  base = 20;
-      else if (distKm <= 12) base = 30;
-      else if (distKm <= 21) base = 40;
-      else if (distKm <= 32) base = 50;
-      else base = 60;
-      return Math.round(base * m);
+  const d = distKm;
+  switch (region) {
+
+    // ── Europe (€ EUR) ──────────────────────────────────────────────────────
+    case 'europe': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(2.0, 1.5 + d * 0.12) * 10) / 10;
+      case 'metro':
+      case 'tram':     return d <= 30 ? 3.3 : Math.round((3.3 + (d - 30) * 0.08) * 10) / 10;
+      case 'auto':     return Math.round((3.0 + d * 1.8) * 10) / 10;
+      case 'taxi':     return Math.round((3.5 + d * 2.2) * 10) / 10;
+      case 'car_bike': return Math.round(d * 0.35 * 10) / 10;
+      case 'train':    return d <= 50  ? Math.round(Math.max(5,  4  + d * 0.22) * 10) / 10
+                            : d <= 300 ? Math.round(Math.max(15, 8  + d * 0.18) * 10) / 10
+                            : d <= 800 ? Math.round(Math.max(40, 15 + d * 0.14) * 10) / 10
+                            :            Math.round(Math.max(80, 20 + d * 0.11) * 10) / 10;
+      case 'ferry':    return Math.round(Math.max(8, 5 + d * 0.25) * 10) / 10;
+      case 'air':      return Math.max(80, Math.round(60 + d * 0.12));
+      default:         return Math.round(d * 1.5 * 10) / 10;
     }
-    case 'auto':     return Math.round((25 + distKm * 11) * m);
-    case 'taxi':     return Math.round((80 + distKm * 18) * m);
-    case 'car_bike': return Math.round(distKm * 8 * m);
-    case 'train': {
-      let base;
-      if (distKm <= 50)       base = Math.max(50,  Math.round(50  + distKm * 2.0));
-      else if (distKm <= 300) base = Math.max(120, Math.round(80  + distKm * 2.5));
-      else if (distKm <= 800) base = Math.max(350, Math.round(100 + distKm * 3.0));
-      else                    base = Math.max(700, Math.round(150 + distKm * 3.5));
-      return Math.round(base * m);
+
+    // ── Americas ($ USD) ────────────────────────────────────────────────────
+    case 'americas': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(1.5, 1.25 + d * 0.10) * 10) / 10;
+      case 'metro':
+      case 'tram':     return d <= 30 ? 2.75 : Math.round((2.75 + (d - 30) * 0.07) * 10) / 10;
+      case 'auto':     return Math.round((3.0 + d * 2.0) * 10) / 10;
+      case 'taxi':     return Math.round((2.5 + d * 2.5) * 10) / 10;
+      case 'car_bike': return Math.round(d * 0.18 * 10) / 10;
+      case 'train':    return d <= 50  ? Math.round(Math.max(5,  4  + d * 0.20) * 10) / 10
+                            : d <= 300 ? Math.round(Math.max(15, 10 + d * 0.18) * 10) / 10
+                            : d <= 800 ? Math.round(Math.max(40, 20 + d * 0.15) * 10) / 10
+                            :            Math.round(Math.max(80, 30 + d * 0.12) * 10) / 10;
+      case 'ferry':    return Math.round(Math.max(10, 8 + d * 0.30) * 10) / 10;
+      case 'air':      return Math.max(100, Math.round(80 + d * 0.15));
+      default:         return Math.round(d * 2.0 * 10) / 10;
     }
-    case 'ferry':    return Math.round(Math.max(50, 50 + distKm * 3) * m);
-    case 'air':      return Math.max(2000, Math.round((1500 + distKm * 5) * m));
-    default:         return Math.round(distKm * 10 * m);
+
+    // ── Oceania (A$ AUD) ────────────────────────────────────────────────────
+    case 'oceania': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(3.0, 2.0 + d * 0.15) * 10) / 10;
+      case 'metro':
+      case 'tram':     return d <= 30 ? 4.6 : Math.round((4.6 + (d - 30) * 0.10) * 10) / 10;
+      case 'taxi':
+      case 'auto':     return Math.round((4.2 + d * 2.5) * 10) / 10;
+      case 'car_bike': return Math.round(d * 0.28 * 10) / 10;
+      case 'train':    return d <= 50  ? Math.round(Math.max(4,  3  + d * 0.18) * 10) / 10
+                            : d <= 300 ? Math.round(Math.max(12, 8  + d * 0.16) * 10) / 10
+                            :            Math.round(Math.max(35, 15 + d * 0.13) * 10) / 10;
+      case 'ferry':    return Math.round(Math.max(8, 6 + d * 0.25) * 10) / 10;
+      case 'air':      return Math.max(120, Math.round(90 + d * 0.20));
+      default:         return Math.round(d * 2.0 * 10) / 10;
+    }
+
+    // ── East Asia (¥ JPY) ────────────────────────────────────────────────────
+    case 'east_asia': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(220, 180 + d * 10));
+      case 'metro':
+      case 'tram':     return d <= 3  ? 180
+                            : d <= 10 ? 200 + Math.round(d * 15)
+                            : d <= 25 ? 300 + Math.round(d * 12)
+                            :           Math.round(400 + d * 10);
+      case 'auto':
+      case 'taxi':     return Math.round(500 + d * 90);
+      case 'car_bike': return Math.round(d * 25);
+      case 'train':    return d <= 50  ? Math.round(Math.max(200,  150 + d * 16))
+                            : d <= 300 ? Math.round(Math.max(900,  300 + d * 22))
+                            :            Math.round(Math.max(5000, 1000 + d * 20));
+      case 'ferry':    return Math.round(Math.max(500, 400 + d * 30));
+      case 'air':      return Math.max(8000, Math.round(5000 + d * 12));
+      default:         return Math.round(d * 80);
+    }
+
+    // ── Middle East (AED) ────────────────────────────────────────────────────
+    case 'middle_east': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(2, 1.5 + d * 0.08) * 10) / 10;
+      case 'metro':
+      case 'tram':     return d <= 20 ? 5 : Math.round((5 + (d - 20) * 0.12) * 10) / 10;
+      case 'auto':
+      case 'taxi':     return Math.round((5 + d * 2.2) * 10) / 10;
+      case 'car_bike': return Math.round(d * 0.30 * 10) / 10;
+      case 'train':    return d <= 100 ? Math.round(Math.max(5,  3  + d * 0.12) * 10) / 10
+                            :            Math.round(Math.max(15, 10 + d * 0.10) * 10) / 10;
+      case 'ferry':    return Math.round(Math.max(10, 8 + d * 0.20) * 10) / 10;
+      case 'air':      return Math.max(150, Math.round(100 + d * 0.18));
+      default:         return Math.round(d * 2.0 * 10) / 10;
+    }
+
+    // ── Africa (KSh KES) ────────────────────────────────────────────────────
+    case 'africa': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(30, 20 + d * 5));
+      case 'metro':
+      case 'tram':     return Math.round(Math.max(50, 40 + d * 4));
+      case 'auto':
+      case 'taxi':     return Math.round(Math.max(200, 150 + d * 45));
+      case 'car_bike': return Math.round(d * 12);
+      case 'train':    return d <= 100 ? Math.round(Math.max(200, 100 + d * 8))
+                            :            Math.round(Math.max(800, 300 + d * 6));
+      case 'ferry':    return Math.round(Math.max(300, 200 + d * 20));
+      case 'air':      return Math.max(8000, Math.round(5000 + d * 15));
+      default:         return Math.round(d * 30);
+    }
+
+    // ── Southeast Asia (฿ THB) ───────────────────────────────────────────────
+    case 'southeast_asia': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(15, 12 + d * 1.5));
+      case 'metro':
+      case 'tram':     return d <= 5  ? 25
+                            : d <= 15 ? 35 + Math.round(d * 2)
+                            :           Math.round(50 + d * 1.8);
+      case 'auto':     return Math.round(Math.max(40, 35 + d * 8));
+      case 'taxi':     return Math.round(Math.max(50, 35 + d * 10));
+      case 'car_bike': return Math.round(d * 4);
+      case 'train':    return d <= 100 ? Math.round(Math.max(30,  20 + d * 2))
+                            : d <= 500 ? Math.round(Math.max(150, 50 + d * 1.5))
+                            :            Math.round(Math.max(400, 100 + d * 1.2));
+      case 'ferry':    return Math.round(Math.max(80, 60 + d * 5));
+      case 'air':      return Math.max(1200, Math.round(800 + d * 3));
+      default:         return Math.round(d * 10);
+    }
+
+    // ── Russia / Central Asia (₽ RUB) ────────────────────────────────────────
+    case 'russia_central_asia': switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(40, 30 + d * 3));
+      case 'metro':
+      case 'tram':     return Math.round(Math.max(60, 45 + d * 3));
+      case 'auto':
+      case 'taxi':     return Math.round(Math.max(200, 150 + d * 25));
+      case 'car_bike': return Math.round(d * 8);
+      case 'train':    return d <= 100 ? Math.round(Math.max(200, 100 + d * 10))
+                            : d <= 500 ? Math.round(Math.max(800, 200 + d * 8))
+                            :            Math.round(Math.max(2000, 500 + d * 6));
+      case 'ferry':    return Math.round(Math.max(300, 200 + d * 15));
+      case 'air':      return Math.max(5000, Math.round(3000 + d * 8));
+      default:         return Math.round(d * 20);
+    }
+
+    // ── South Asia default (₹ INR) ───────────────────────────────────────────
+    default: switch (mode) {
+      case 'walking':  return 0;
+      case 'bus':      return Math.round(Math.max(10, 10 + d * 1.5));
+      case 'metro':
+      case 'tram':     return d <= 2  ? 10
+                            : d <= 5  ? 20
+                            : d <= 12 ? 30
+                            : d <= 21 ? 40
+                            : d <= 32 ? 50 : 60;
+      case 'auto':     return Math.round(Math.max(30, 30 + d * 12));
+      case 'taxi':     return Math.round(Math.max(60, 50 + d * 14));
+      case 'car_bike': return Math.round(d * 6);
+      case 'train':    return d <= 50  ? Math.round(Math.max(50,  50  + d * 1.8))
+                            : d <= 300 ? Math.round(Math.max(130, 80  + d * 2.2))
+                            : d <= 800 ? Math.round(Math.max(380, 100 + d * 2.8))
+                            :            Math.round(Math.max(750, 150 + d * 3.2));
+      case 'ferry':    return Math.round(Math.max(50, 40 + d * 3));
+      case 'air':      return Math.max(2000, Math.round(1500 + d * 4));
+      default:         return Math.round(d * 10);
+    }
   }
 }
 
@@ -956,10 +1096,13 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     deduped.sort((a, b) => a.totalDurationMins - b.totalDurationMins);
   }
 
+  const currency = regionCurrency(region);
   return {
     startName, endName,
     totalDistanceKm: totalDist.toFixed(2),
     isIntercontinental,
+    currencySymbol: currency.symbol,
+    currencyCode: currency.code,
     nearbyTransport: {
       busStops: nearbyStartBus,
       metroStations: nearbyStartMetro,

@@ -17,7 +17,7 @@ const MODE_LABELS = {
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 export default function MapScreen({ route }) {
-  const { selectedRoute, startName, endName } = route.params;
+  const { selectedRoute, startName, endName, currencySymbol = '₹' } = route.params;
   const legs = selectedRoute.legs;
 
   // Build waypoints from legs
@@ -38,7 +38,7 @@ export default function MapScreen({ route }) {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{selectedRoute.label}</Text>
         <View style={styles.headerBadges}>
-          <View style={styles.badge}><Text style={styles.badgeText}>₹{selectedRoute.totalCost}</Text></View>
+          <View style={styles.badge}><Text style={styles.badgeText}>{currencySymbol}{selectedRoute.totalCost}</Text></View>
           <View style={[styles.badge, styles.timeBadge]}><Text style={[styles.badgeText, styles.timeBadgeText]}>{selectedRoute.totalDurationMins} min</Text></View>
           <View style={[styles.badge, styles.distBadge]}><Text style={[styles.badgeText, styles.distBadgeText]}>{selectedRoute.totalDistanceKm} km</Text></View>
         </View>
@@ -63,7 +63,7 @@ export default function MapScreen({ route }) {
                       <View style={[styles.modeChip, { backgroundColor: color + '22' }]}>
                         <Text style={[styles.modeChipText, { color }]}>{MODE_ICONS[legs[idx-1].mode]} {MODE_LABELS[legs[idx-1].mode]}</Text>
                       </View>
-                      <Text style={styles.legMeta}>{legs[idx-1].distanceKm} km · {legs[idx-1].durationMins} min · ₹{legs[idx-1].cost}</Text>
+                      <Text style={styles.legMeta}>{legs[idx-1].distanceKm} km · {legs[idx-1].durationMins} min · {currencySymbol}{legs[idx-1].cost}</Text>
                       {legs[idx-1].nextScheduled ? (
                         <Text style={[styles.scheduleText, { color }]}>Next: {legs[idx-1].nextScheduled} · every {legs[idx-1].frequency} min</Text>
                       ) : null}
@@ -112,7 +112,7 @@ export default function MapScreen({ route }) {
           <View style={styles.legStatsRow}>
             <View style={styles.legStat}><Text style={styles.legStatVal}>{leg.distanceKm} km</Text><Text style={styles.legStatLbl}>Distance</Text></View>
             <View style={styles.legStat}><Text style={styles.legStatVal}>{leg.durationMins} min</Text><Text style={styles.legStatLbl}>Duration</Text></View>
-            <View style={styles.legStat}><Text style={styles.legStatVal}>₹{leg.cost}</Text><Text style={styles.legStatLbl}>Fare</Text></View>
+            <View style={styles.legStat}><Text style={styles.legStatVal}>{currencySymbol}{leg.cost}</Text><Text style={styles.legStatLbl}>Fare</Text></View>
           </View>
           {leg.nextScheduled && (
             <View style={styles.scheduleRow}>
