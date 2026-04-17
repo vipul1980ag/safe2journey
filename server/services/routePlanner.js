@@ -1140,40 +1140,25 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       });
     }
 
-    // ── Combine origin + flight + destination variants ──────────────────────
-    // Strategy: take the best origin option and pair it with EVERY dest option
-    // so the user always sees all destination modes. Then add remaining origin
-    // variants paired with the best dest option for variety.
+    // ── Combine origin + flight + destination — full N×M matrix ────────────
+    // Every origin option paired with every destination option so the user
+    // sees all permutations (e.g. Taxi+Train → Taxi, Bus+Train → Metro+Auto, etc.)
     const flightRoutes = [];
-    const bestOrig = originOpts[0]; // fastest/cheapest origin option
-
-    // All dest options paired with the best origin (guarantees every dest mode shown)
-    for (const dest of destOpts) {
-      const allLegs = tagLegsWithBooking([...bestOrig.legs, flightLeg, ...dest.legs], region, endRegion);
-      const totals  = legsTotals(allLegs);
-      flightRoutes.push({
-        case: 5,
-        label: `Flight (${bestOrig.label} → ${dest.label})`,
-        legs: allLegs,
-        ...totals,
-        totalDistanceKm: totalDist.toFixed(2),
-      });
+    for (const orig of originOpts) {
+      for (const dest of destOpts) {
+        const allLegs = tagLegsWithBooking([...orig.legs, flightLeg, ...dest.legs], region, endRegion);
+        const totals  = legsTotals(allLegs);
+        flightRoutes.push({
+          case: 5,
+          label: `Flight (${orig.label} → ${dest.label})`,
+          legs: allLegs,
+          ...totals,
+          totalDistanceKm: totalDist.toFixed(2),
+        });
+      }
     }
-
-    // Remaining origin options paired with the best dest option (show origin variety)
-    const bestDest = destOpts[0];
-    for (const orig of originOpts.slice(1)) {
-      const allLegs = tagLegsWithBooking([...orig.legs, flightLeg, ...bestDest.legs], region, endRegion);
-      const totals  = legsTotals(allLegs);
-      flightRoutes.push({
-        case: 5,
-        label: `Flight (${orig.label} → ${bestDest.label})`,
-        legs: allLegs,
-        ...totals,
-        totalDistanceKm: totalDist.toFixed(2),
-      });
-    }
-
+    // Sort by total duration so fastest options come first
+    flightRoutes.sort((a, b) => a.totalDurationMins - b.totalDurationMins);
     routes.push(...flightRoutes);
   }
 
