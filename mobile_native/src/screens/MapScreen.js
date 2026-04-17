@@ -63,7 +63,7 @@ export default function MapScreen({ route }) {
                       <View style={[styles.modeChip, { backgroundColor: color + '22' }]}>
                         <Text style={[styles.modeChipText, { color }]}>{MODE_ICONS[legs[idx-1].mode]} {MODE_LABELS[legs[idx-1].mode]}</Text>
                       </View>
-                      <Text style={styles.legMeta}>{legs[idx-1].distanceKm} km · {legs[idx-1].durationMins} min · {currencySymbol}{legs[idx-1].cost}</Text>
+                      <Text style={styles.legMeta}>{legs[idx-1].distanceKm} km · {legs[idx-1].durationMins} min · {legs[idx-1].currencySymbol || currencySymbol}{legs[idx-1].cost}</Text>
                       {legs[idx-1].nextScheduled ? (
                         <Text style={[styles.scheduleText, { color }]}>Next: {legs[idx-1].nextScheduled} · every {legs[idx-1].frequency} min</Text>
                       ) : null}
@@ -112,7 +112,7 @@ export default function MapScreen({ route }) {
           <View style={styles.legStatsRow}>
             <View style={styles.legStat}><Text style={styles.legStatVal}>{leg.distanceKm} km</Text><Text style={styles.legStatLbl}>Distance</Text></View>
             <View style={styles.legStat}><Text style={styles.legStatVal}>{leg.durationMins} min</Text><Text style={styles.legStatLbl}>Duration</Text></View>
-            <View style={styles.legStat}><Text style={styles.legStatVal}>{currencySymbol}{leg.cost}</Text><Text style={styles.legStatLbl}>Fare</Text></View>
+            <View style={styles.legStat}><Text style={styles.legStatVal}>{leg.currencySymbol || currencySymbol}{leg.cost}</Text><Text style={styles.legStatLbl}>Fare</Text></View>
           </View>
           {leg.nextScheduled && (
             <View style={styles.scheduleRow}>

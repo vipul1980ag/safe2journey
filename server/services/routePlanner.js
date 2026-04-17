@@ -1096,13 +1096,45 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     deduped.sort((a, b) => a.totalDurationMins - b.totalDurationMins);
   }
 
-  const currency = regionCurrency(region);
+  const currency    = regionCurrency(region);
+  const endCurrency = regionCurrency(endRegion);
+  const mixedCurrency = currency.symbol !== endCurrency.symbol;
+
+  // Tag each leg with its own currencySymbol and split intercontinental totalCosts
+  if (mixedCurrency) {
+    for (const route of deduped) {
+      let passedFlight = false;
+      let originCost = 0, destCost = 0;
+      for (const leg of route.legs) {
+        if (leg.mode === 'air') {
+          passedFlight = true;
+          leg.currencySymbol = currency.symbol;
+          originCost += leg.cost || 0;
+        } else if (passedFlight) {
+          leg.currencySymbol = endCurrency.symbol;
+          destCost += leg.cost || 0;
+        } else {
+          leg.currencySymbol = currency.symbol;
+          originCost += leg.cost || 0;
+        }
+      }
+      route.originCost           = Math.round(originCost * 100) / 100;
+      route.destCost             = Math.round(destCost * 100) / 100;
+      route.originCurrencySymbol = currency.symbol;
+      route.destCurrencySymbol   = endCurrency.symbol;
+      route.totalCost            = route.originCost; // primary cost in origin currency
+    }
+  }
+
   return {
     startName, endName,
     totalDistanceKm: totalDist.toFixed(2),
     isIntercontinental,
     currencySymbol: currency.symbol,
     currencyCode: currency.code,
+    endCurrencySymbol: endCurrency.symbol,
+    endCurrencyCode: endCurrency.code,
+    mixedCurrency,
     nearbyTransport: {
       busStops: nearbyStartBus,
       metroStations: nearbyStartMetro,

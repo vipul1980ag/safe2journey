@@ -41,14 +41,25 @@ const MODE_LABELS = {
 };
 
 export default function RouteCard({ route, onSelect, currencySymbol = '₹' }) {
+  const isMixed = route.originCurrencySymbol && route.destCurrencySymbol &&
+                  route.originCurrencySymbol !== route.destCurrencySymbol;
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.label}>{route.label}</Text>
         <View style={styles.badges}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{currencySymbol}{route.totalCost}</Text>
-          </View>
+          {isMixed ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {route.originCurrencySymbol}{route.originCost} + {route.destCurrencySymbol}{route.destCost}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{currencySymbol}{route.totalCost}</Text>
+            </View>
+          )}
           <View style={[styles.badge, styles.timeBadge]}>
             <Text style={[styles.badgeText, styles.timeBadgeText]}>{route.totalDurationMins} min</Text>
           </View>
@@ -56,22 +67,28 @@ export default function RouteCard({ route, onSelect, currencySymbol = '₹' }) {
       </View>
 
       <View style={styles.legs}>
-        {route.legs.map((leg, i) => (
-          <View key={i} style={styles.leg}>
-            <View style={[styles.dot, { backgroundColor: MODE_COLORS[leg.mode] || '#999' }]}>
-              <Text style={styles.dotIcon}>{MODE_ICONS[leg.mode]}</Text>
+        {route.legs.map((leg, i) => {
+          const sym = leg.currencySymbol || currencySymbol;
+          return (
+            <View key={i} style={styles.leg}>
+              <View style={[styles.dot, { backgroundColor: MODE_COLORS[leg.mode] || '#999' }]}>
+                <Text style={styles.dotIcon}>{MODE_ICONS[leg.mode]}</Text>
+              </View>
+              <View style={styles.legInfo}>
+                <Text style={styles.modeName}>{MODE_LABELS[leg.mode]}</Text>
+                <Text style={styles.legDetail}>{leg.distanceKm} km · {leg.durationMins} min · {sym}{leg.cost}</Text>
+                {leg.boardingStop ? <Text style={styles.meta}>Board: {leg.boardingStop}</Text> : null}
+                {leg.alightingStop ? <Text style={styles.meta}>Alight: {leg.alightingStop}</Text> : null}
+                {leg.nextScheduled ? (
+                  <Text style={styles.schedule}>Next: {leg.nextScheduled} · every {leg.frequency} min</Text>
+                ) : null}
+                {leg.note ? <Text style={[styles.meta, { color: '#1565C0' }]}>{leg.note}</Text> : null}
+                {leg.routeId ? <Text style={styles.meta}>Route {leg.routeId}</Text> : null}
+                {leg.line ? <Text style={[styles.meta, { color: '#7B1FA2' }]}>{leg.line}</Text> : null}
+              </View>
             </View>
-            <View style={styles.legInfo}>
-              <Text style={styles.modeName}>{MODE_LABELS[leg.mode]}</Text>
-              <Text style={styles.legDetail}>{leg.distanceKm} km · {leg.durationMins} min · {currencySymbol}{leg.cost}</Text>
-              {leg.nextScheduled ? (
-                <Text style={styles.schedule}>Next: {leg.nextScheduled} · every {leg.frequency} min</Text>
-              ) : null}
-              {leg.routeId ? <Text style={styles.meta}>Route {leg.routeId}</Text> : null}
-              {leg.line ? <Text style={[styles.meta, { color: '#7B1FA2' }]}>{leg.line}</Text> : null}
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       <View style={styles.footer}>
@@ -101,18 +118,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 14,
   },
   label: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', flex: 1 },
-  badges: { flexDirection: 'row', gap: 6 },
+  badges: { flexDirection: 'column', gap: 4, alignItems: 'flex-end' },
   badge: {
     backgroundColor: '#E3F2FD',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
   },
-  badgeText: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
   timeBadge: { backgroundColor: '#E8F5E9' },
   timeBadgeText: { color: '#2E7D32' },
   legs: { borderLeftWidth: 2, borderLeftColor: '#E0E0E0', marginLeft: 14, paddingLeft: 14 },
