@@ -890,49 +890,78 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     const sBus   = nearbyStartBus[0]   || null;
 
     if (region === 'europe' || region === 'east_asia' || region === 'americas') {
-      // Walk + Tram → City Train → Airport express
+      // Each available transit type is offered independently (no else-if — show all options)
+
       if (sTrain) {
-        const walkDist   = Math.min(0.4, sTrain.distance);
-        const tramDist   = Math.max(0.3, sTrain.distance - walkDist);
-        const trainToApt = Math.max(1,   aptDist - sTrain.distance);
+        const trainToApt = Math.max(1, aptDist - sTrain.distance);
+
+        // Walk + Tram → Train station → Train to airport
+        const walkDist = Math.min(0.4, sTrain.distance);
+        const tramDist = Math.max(0.3, sTrain.distance - walkDist);
         originOpts.push({
           label: 'Walk + Tram + Train',
           legs: [
-            { mode: 'walking', from: startName,         to: 'Tram / Bus Stop',  distanceKm: walkDist.toFixed(2),   cost: 0,                                  durationMins: duration('walking', walkDist) },
-            { mode: 'tram',    from: 'Tram / Bus Stop', to: sTrain.name,        distanceKm: tramDist.toFixed(2),   cost: cost('tram', tramDist, region),      durationMins: duration('tram', tramDist),   waitMinutes: 5, frequency: 10, nextScheduled: estimatedSchedule('metro', fromDate).next },
-            { mode: 'train',   from: sTrain.name,       to: startAptName,       distanceKm: trainToApt.toFixed(2), cost: cost('train', trainToApt, region),   durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
+            { mode: 'walking', from: startName,         to: 'Tram / Bus Stop', distanceKm: walkDist.toFixed(2),    cost: 0,                                 durationMins: duration('walking', walkDist) },
+            { mode: 'tram',    from: 'Tram / Bus Stop', to: sTrain.name,       distanceKm: tramDist.toFixed(2),    cost: cost('tram', tramDist, region),     durationMins: duration('tram', tramDist),    waitMinutes: 5, frequency: 10, nextScheduled: estimatedSchedule('metro', fromDate).next },
+            { mode: 'train',   from: sTrain.name,       to: startAptName,      distanceKm: trainToApt.toFixed(2), cost: cost('train', trainToApt, region),  durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
           ],
         });
-        // Bicycle → park at station → Train to airport (Europe only)
-        if (region === 'europe') {
-          const bikeDist   = Math.max(0.5, sTrain.distance);
-          const trainToApt2 = Math.max(1, aptDist - sTrain.distance);
+
+        // Taxi → Train station → Train to airport
+        originOpts.push({
+          label: 'Taxi + Train',
+          legs: [
+            { mode: 'taxi',  from: startName,  to: sTrain.name,  distanceKm: sTrain.distance.toFixed(2), cost: cost('taxi', sTrain.distance, region),  durationMins: duration('taxi', sTrain.distance) },
+            { mode: 'train', from: sTrain.name, to: startAptName, distanceKm: trainToApt.toFixed(2),      cost: cost('train', trainToApt, region),       durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
+          ],
+        });
+
+        // Bus → Train station → Train to airport (if bus stop nearby)
+        if (sBus) {
+          const busDist2 = Math.max(0.3, sTrain.distance - Math.min(0.3, sBus.distance));
           originOpts.push({
-            label: 'Bicycle + Train',
+            label: 'Bus + Train',
             legs: [
-              { mode: 'car_bike', from: startName,  to: `${sTrain.name} (Bike Park)`, distanceKm: bikeDist.toFixed(2),    cost: 0, durationMins: duration('car_bike', bikeDist), note: 'Park bicycle at station bike parking (Fahrradstellplatz)' },
-              { mode: 'train',    from: sTrain.name, to: startAptName,                distanceKm: trainToApt2.toFixed(2), cost: cost('train', trainToApt2, region), durationMins: duration('train', trainToApt2), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
+              { mode: 'bus',   from: startName,  to: sTrain.name,  distanceKm: busDist2.toFixed(2),     cost: cost('bus', busDist2, region),          durationMins: duration('bus', busDist2),   waitMinutes: 8, frequency: 15, boardingStop: sBus.name, alightingStop: sTrain.name, nextScheduled: estimatedSchedule('bus', fromDate).next },
+              { mode: 'train', from: sTrain.name, to: startAptName, distanceKm: trainToApt.toFixed(2),   cost: cost('train', trainToApt, region),       durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
             ],
           });
         }
-      } else if (sMetro) {
+
+        // Bicycle → park at station → Train to airport (Europe only)
+        if (region === 'europe') {
+          const bikeDist = Math.max(0.5, sTrain.distance);
+          originOpts.push({
+            label: 'Bicycle + Train',
+            legs: [
+              { mode: 'car_bike', from: startName,  to: `${sTrain.name} (Bike Park)`, distanceKm: bikeDist.toFixed(2),    cost: 0,                                  durationMins: duration('car_bike', bikeDist), note: 'Park bicycle at station bike parking (Fahrradstellplatz)' },
+              { mode: 'train',    from: sTrain.name, to: startAptName,                 distanceKm: trainToApt.toFixed(2),  cost: cost('train', trainToApt, region),   durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
+            ],
+          });
+        }
+      }
+
+      if (sMetro) {
         const walkDist   = Math.min(0.5, sMetro.distance);
         const metroToApt = Math.max(1, aptDist - walkDist);
         originOpts.push({
           label: 'Walk + Metro',
           legs: [
-            { mode: 'walking', from: startName,    to: sMetro.name,  distanceKm: walkDist.toFixed(2),   cost: 0,                                  durationMins: duration('walking', walkDist) },
-            { mode: 'metro',   from: sMetro.name,  to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt, region),   durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, boardingStop: sMetro.name, alightingStop: startAptName, nextScheduled: estimatedSchedule('metro', fromDate).next, note: 'Metro / subway to airport' },
+            { mode: 'walking', from: startName,   to: sMetro.name,  distanceKm: walkDist.toFixed(2),   cost: 0,                                 durationMins: duration('walking', walkDist) },
+            { mode: 'metro',   from: sMetro.name, to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt, region),  durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, boardingStop: sMetro.name, alightingStop: startAptName, nextScheduled: estimatedSchedule('metro', fromDate).next, note: 'Metro / subway to airport' },
           ],
         });
-      } else if (sBus) {
-        const walkDist  = Math.min(0.4, sBus.distance);
-        const busToApt  = Math.max(1, aptDist - walkDist);
+      }
+
+      if (sBus && !sTrain) {
+        // Bus directly to airport (only when no train — avoids duplicate when Bus+Train already added)
+        const walkDist = Math.min(0.4, sBus.distance);
+        const busToApt = Math.max(1, aptDist - walkDist);
         originOpts.push({
           label: 'Walk + Bus',
           legs: [
-            { mode: 'walking', from: startName,   to: sBus.name,    distanceKm: walkDist.toFixed(2), cost: 0,                                durationMins: duration('walking', walkDist) },
-            { mode: 'bus',     from: sBus.name,   to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt, region),    durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, boardingStop: sBus.name, alightingStop: startAptName, note: 'Airport bus / shuttle' },
+            { mode: 'walking', from: startName,  to: sBus.name,    distanceKm: walkDist.toFixed(2), cost: 0,                              durationMins: duration('walking', walkDist) },
+            { mode: 'bus',     from: sBus.name,  to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt, region),  durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, boardingStop: sBus.name, alightingStop: startAptName, note: 'Airport bus / shuttle' },
           ],
         });
       }
@@ -943,18 +972,19 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
         originOpts.push({
           label: `${autoName} + Metro`,
           legs: [
-            { mode: 'auto',  from: startName,   to: sMetro.name,  distanceKm: autoDist.toFixed(2),   cost: cost('auto', autoDist, region),    durationMins: duration('auto', autoDist) },
-            { mode: 'metro', from: sMetro.name, to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt, region),  durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, boardingStop: sMetro.name, alightingStop: startAptName, nextScheduled: estimatedSchedule('metro', fromDate).next },
+            { mode: 'auto',  from: startName,   to: sMetro.name,  distanceKm: autoDist.toFixed(2),   cost: cost('auto', autoDist, region),   durationMins: duration('auto', autoDist) },
+            { mode: 'metro', from: sMetro.name, to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt, region), durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, boardingStop: sMetro.name, alightingStop: startAptName, nextScheduled: estimatedSchedule('metro', fromDate).next },
           ],
         });
-      } else if (sBus) {
-        const autoDist  = Math.min(2, sBus.distance);
-        const busToApt  = Math.max(1, aptDist - autoDist);
+      }
+      if (sBus) {
+        const autoDist = Math.min(2, sBus.distance);
+        const busToApt = Math.max(1, aptDist - autoDist);
         originOpts.push({
           label: `${autoName} + Bus`,
           legs: [
-            { mode: 'auto', from: startName, to: sBus.name,    distanceKm: autoDist.toFixed(2), cost: cost('auto', autoDist, region),   durationMins: duration('auto', autoDist) },
-            { mode: 'bus',  from: sBus.name, to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt, region),    durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, boardingStop: sBus.name, alightingStop: startAptName, note: 'Airport bus' },
+            { mode: 'auto', from: startName, to: sBus.name,    distanceKm: autoDist.toFixed(2), cost: cost('auto', autoDist, region),  durationMins: duration('auto', autoDist) },
+            { mode: 'bus',  from: sBus.name, to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt, region),   durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, boardingStop: sBus.name, alightingStop: startAptName, note: 'Airport bus' },
           ],
         });
       }
