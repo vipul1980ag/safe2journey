@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 
 const MODE_COLORS = {
   bus: '#1976D2',
@@ -40,8 +40,11 @@ const MODE_LABELS = {
   air: 'Flight',
 };
 
+function openBooking(url) {
+  if (url) Linking.openURL(url).catch(() => {});
+}
+
 export default function RouteCard({ route, onSelect, currencySymbol: propSymbol = '₹' }) {
-  // Prefer route-embedded symbol (server always sets this), fall back to prop
   const currencySymbol = route.currencySymbol || propSymbol;
   const isMixed = route.originCurrencySymbol && route.destCurrencySymbol &&
                   route.originCurrencySymbol !== route.destCurrencySymbol;
@@ -71,13 +74,25 @@ export default function RouteCard({ route, onSelect, currencySymbol: propSymbol 
       <View style={styles.legs}>
         {route.legs.map((leg, i) => {
           const sym = leg.currencySymbol || currencySymbol;
+          const color = MODE_COLORS[leg.mode] || '#999';
+          const hasBooking = !!leg.bookingUrl;
           return (
             <View key={i} style={styles.leg}>
-              <View style={[styles.dot, { backgroundColor: MODE_COLORS[leg.mode] || '#999' }]}>
+              <View style={[styles.dot, { backgroundColor: color }]}>
                 <Text style={styles.dotIcon}>{MODE_ICONS[leg.mode]}</Text>
               </View>
               <View style={styles.legInfo}>
-                <Text style={styles.modeName}>{MODE_LABELS[leg.mode]}</Text>
+                <View style={styles.legHeader}>
+                  <Text style={styles.modeName}>{MODE_LABELS[leg.mode]}</Text>
+                  {hasBooking && (
+                    <TouchableOpacity
+                      style={[styles.bookBtn, { backgroundColor: color }]}
+                      onPress={() => openBooking(leg.bookingUrl)}
+                    >
+                      <Text style={styles.bookBtnText}>Book · {leg.bookingProvider}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 <Text style={styles.legDetail}>{leg.distanceKm} km · {leg.durationMins} min · {sym}{leg.cost}</Text>
                 {leg.boardingStop ? <Text style={styles.meta}>Board: {leg.boardingStop}</Text> : null}
                 {leg.alightingStop ? <Text style={styles.meta}>Alight: {leg.alightingStop}</Text> : null}
@@ -147,7 +162,14 @@ const styles = StyleSheet.create({
   },
   dotIcon: { fontSize: 16 },
   legInfo: { flex: 1 },
+  legHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   modeName: { fontSize: 14, fontWeight: '700', color: '#333' },
+  bookBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  bookBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
   legDetail: { fontSize: 12, color: '#666', marginTop: 2 },
   schedule: { fontSize: 11, color: '#1565C0', marginTop: 2 },
   meta: { fontSize: 11, color: '#999', marginTop: 1 },

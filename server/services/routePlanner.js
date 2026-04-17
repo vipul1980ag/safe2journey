@@ -1088,23 +1088,93 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       ],
     });
 
-    // ── Combine origin + flight + destination variants (cap at 4 routes) ───
-    const flightRoutes = [];
-    for (const orig of originOpts) {
-      for (const dest of destOpts) {
-        const allLegs = [...orig.legs, flightLeg, ...dest.legs];
-        const totals  = legsTotals(allLegs);
-        flightRoutes.push({
-          case: 5,
-          label: `Flight (${orig.label} → ${dest.label})`,
-          legs: allLegs,
-          ...totals,
-          totalDistanceKm: totalDist.toFixed(2),
-        });
+    // ── Tag each leg with booking info ─────────────────────────────────────
+    function bookingInfo(mode, legRegion) {
+      switch (mode) {
+        case 'taxi':
+          if (legRegion === 'south_asia')   return { bookingProvider: 'Ola / Uber',      bookingUrl: 'https://olalinks.onelink.me/94DF/booking' };
+          if (legRegion === 'europe')       return { bookingProvider: 'Uber',             bookingUrl: 'https://m.uber.com/looking' };
+          if (legRegion === 'americas')     return { bookingProvider: 'Uber / Lyft',      bookingUrl: 'https://m.uber.com/looking' };
+          if (legRegion === 'southeast_asia') return { bookingProvider: 'Grab',           bookingUrl: 'https://www.grab.com/sg/download/' };
+          return { bookingProvider: 'Uber',       bookingUrl: 'https://m.uber.com/looking' };
+        case 'auto':
+          if (legRegion === 'south_asia')   return { bookingProvider: 'Ola Auto / Rapido', bookingUrl: 'https://play.google.com/store/apps/details?id=com.olacabs.customer' };
+          if (legRegion === 'southeast_asia') return { bookingProvider: 'Grab',            bookingUrl: 'https://www.grab.com/sg/download/' };
+          return { bookingProvider: 'Local Auto',  bookingUrl: null };
+        case 'train':
+          if (legRegion === 'south_asia')   return { bookingProvider: 'IRCTC',            bookingUrl: 'https://www.irctc.co.in/nget/train-search' };
+          if (legRegion === 'europe')       return { bookingProvider: 'Deutsche Bahn',    bookingUrl: 'https://www.bahn.de/buchung/fahrplan/suche' };
+          if (legRegion === 'americas')     return { bookingProvider: 'Amtrak',           bookingUrl: 'https://www.amtrak.com/buy/departure.html' };
+          if (legRegion === 'east_asia')    return { bookingProvider: '12306 / Rail',     bookingUrl: 'https://www.12306.cn' };
+          return { bookingProvider: 'Rail Booking', bookingUrl: null };
+        case 'metro':
+        case 'tram':
+          if (legRegion === 'south_asia')   return { bookingProvider: 'Delhi Metro / City Metro', bookingUrl: 'https://www.delhimetrorail.com/' };
+          if (legRegion === 'europe')       return { bookingProvider: 'Local Transit',    bookingUrl: 'https://www.vrn.de/' };
+          if (legRegion === 'southeast_asia') return { bookingProvider: 'BTS / MRT',     bookingUrl: 'https://www.bts.co.th/eng/index.html' };
+          return { bookingProvider: 'Metro / Tram', bookingUrl: null };
+        case 'bus':
+          if (legRegion === 'south_asia')   return { bookingProvider: 'RedBus',          bookingUrl: 'https://www.redbus.in/' };
+          if (legRegion === 'europe')       return { bookingProvider: 'FlixBus / Local',  bookingUrl: 'https://www.flixbus.de/' };
+          if (legRegion === 'americas')     return { bookingProvider: 'Greyhound',        bookingUrl: 'https://www.greyhound.com/' };
+          return { bookingProvider: 'Bus Booking', bookingUrl: null };
+        case 'air':
+          return { bookingProvider: 'Google Flights', bookingUrl: 'https://www.google.com/travel/flights' };
+        case 'ferry':
+          return { bookingProvider: 'Ferry Booking', bookingUrl: null };
+        case 'car_bike':
+          return { bookingProvider: 'Self / Rental', bookingUrl: null };
+        case 'walking':
+          return { bookingProvider: null, bookingUrl: null };
+        default:
+          return { bookingProvider: null, bookingUrl: null };
       }
     }
-    flightRoutes.sort((a, b) => a.totalDurationMins - b.totalDurationMins);
-    routes.push(...flightRoutes.slice(0, 4));
+
+    function tagLegsWithBooking(legs, originRegion, destinationRegion) {
+      let passedFlight = false;
+      return legs.map(l => {
+        if (l.mode === 'air') { passedFlight = true; return { ...l, ...bookingInfo('air', originRegion) }; }
+        const legRegion = passedFlight ? destinationRegion : originRegion;
+        return { ...l, ...bookingInfo(l.mode, legRegion) };
+      });
+    }
+
+    // ── Combine origin + flight + destination variants ──────────────────────
+    // Strategy: take the best origin option and pair it with EVERY dest option
+    // so the user always sees all destination modes. Then add remaining origin
+    // variants paired with the best dest option for variety.
+    const flightRoutes = [];
+    const bestOrig = originOpts[0]; // fastest/cheapest origin option
+
+    // All dest options paired with the best origin (guarantees every dest mode shown)
+    for (const dest of destOpts) {
+      const allLegs = tagLegsWithBooking([...bestOrig.legs, flightLeg, ...dest.legs], region, endRegion);
+      const totals  = legsTotals(allLegs);
+      flightRoutes.push({
+        case: 5,
+        label: `Flight (${bestOrig.label} → ${dest.label})`,
+        legs: allLegs,
+        ...totals,
+        totalDistanceKm: totalDist.toFixed(2),
+      });
+    }
+
+    // Remaining origin options paired with the best dest option (show origin variety)
+    const bestDest = destOpts[0];
+    for (const orig of originOpts.slice(1)) {
+      const allLegs = tagLegsWithBooking([...orig.legs, flightLeg, ...bestDest.legs], region, endRegion);
+      const totals  = legsTotals(allLegs);
+      flightRoutes.push({
+        case: 5,
+        label: `Flight (${orig.label} → ${bestDest.label})`,
+        legs: allLegs,
+        ...totals,
+        totalDistanceKm: totalDist.toFixed(2),
+      });
+    }
+
+    routes.push(...flightRoutes);
   }
 
   // ── Direct motor options — only for road-feasible distances ──────────────
