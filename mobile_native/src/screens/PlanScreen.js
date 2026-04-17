@@ -36,6 +36,59 @@ function autoLabel(region) {
   if (region === 'africa')         return 'Matatu / Tuk-tuk';
   return 'Auto / Rickshaw';
 }
+function regionCurrencySymbol(region) {
+  switch (region) {
+    case 'europe':              return '€';
+    case 'americas':            return '$';
+    case 'oceania':             return 'A$';
+    case 'east_asia':           return '¥';
+    case 'middle_east':         return 'AED';
+    case 'africa':              return 'KSh';
+    case 'southeast_asia':      return '฿';
+    case 'russia_central_asia': return '₽';
+    default:                    return '₹';
+  }
+}
+function offlineFare(mode, distKm, region) {
+  const d = distKm;
+  switch (region) {
+    case 'europe':
+      if (mode === 'taxi' || mode === 'auto') return Math.round((3.5 + d * 2.2) * 10) / 10;
+      if (mode === 'car_bike') return Math.round(d * 0.35 * 10) / 10;
+      if (mode === 'bus')  return Math.round(Math.max(2.0, 1.5 + d * 0.12) * 10) / 10;
+      if (mode === 'metro') return d <= 30 ? 3.3 : Math.round((3.3 + (d - 30) * 0.08) * 10) / 10;
+      return 0;
+    case 'americas':
+      if (mode === 'taxi' || mode === 'auto') return Math.round((2.5 + d * 2.5) * 10) / 10;
+      if (mode === 'car_bike') return Math.round(d * 0.18 * 10) / 10;
+      if (mode === 'bus')  return Math.round(Math.max(1.5, 1.25 + d * 0.10) * 10) / 10;
+      if (mode === 'metro') return d <= 30 ? 2.75 : Math.round((2.75 + (d - 30) * 0.07) * 10) / 10;
+      return 0;
+    case 'east_asia':
+      if (mode === 'taxi' || mode === 'auto') return Math.round(500 + d * 90);
+      if (mode === 'car_bike') return Math.round(d * 25);
+      if (mode === 'bus')  return Math.round(Math.max(220, 180 + d * 10));
+      if (mode === 'metro') return d <= 3 ? 180 : Math.round(200 + d * 15);
+      return 0;
+    case 'southeast_asia':
+      if (mode === 'taxi') return Math.round(Math.max(50, 35 + d * 10));
+      if (mode === 'auto') return Math.round(Math.max(40, 35 + d * 8));
+      if (mode === 'car_bike') return Math.round(d * 4);
+      if (mode === 'bus')  return Math.round(Math.max(15, 12 + d * 1.5));
+      if (mode === 'metro') return d <= 5 ? 25 : Math.round(35 + d * 2);
+      return 0;
+    default: // south_asia
+      if (mode === 'taxi') return Math.round(Math.max(60, 50 + d * 14));
+      if (mode === 'auto') return Math.round(Math.max(30, 30 + d * 12));
+      if (mode === 'car_bike') return Math.round(d * 6);
+      if (mode === 'bus')  return Math.max(10, Math.round(10 + d * 1.5));
+      if (mode === 'metro') {
+        if (d <= 2) return 10; if (d <= 5) return 20;
+        if (d <= 12) return 30; if (d <= 21) return 40; return 50;
+      }
+      return 0;
+  }
+}
 
 // Client-side fallback route planner — works without a server
 function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
@@ -47,22 +100,10 @@ function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
   const region = detectRegion(sLat, sLng);
   const showAuto = hasAutoMode(region);
   const autoName = autoLabel(region);
+  const currencySymbol = regionCurrencySymbol(region);
 
   function dur(speed) { return Math.ceil((distKm / speed) * 60); }
-  function fare(mode) {
-    if (mode === 'auto')     return Math.round(25 + distKm * 11);
-    if (mode === 'taxi')     return Math.round(50 + distKm * 14);
-    if (mode === 'car_bike') return Math.round(distKm * 7);
-    if (mode === 'bus')      return Math.max(10, Math.round(10 + distKm * 2));
-    if (mode === 'metro') {
-      if (distKm <= 2)  return 10;
-      if (distKm <= 5)  return 20;
-      if (distKm <= 12) return 30;
-      if (distKm <= 21) return 40;
-      return 50;
-    }
-    return 0;
-  }
+  function fare(mode) { return offlineFare(mode, distKm, region); }
 
   const routes = [
     { case:0, label:'Taxi / Cab',  legs:[{mode:'taxi',    from:sName,to:eName,distanceKm:distKm,cost:fare('taxi'),    durationMins:dur(30)}], totalCost:fare('taxi'),     totalDurationMins:dur(30), totalDistanceKm:distKm },
@@ -79,7 +120,7 @@ function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
     routes.push({ case:0, label:'Walk', legs:[{mode:'walking',from:sName,to:eName,distanceKm:distKm,cost:0,durationMins:dur(5)}], totalCost:0, totalDurationMins:dur(5), totalDistanceKm:distKm });
   }
   routes.sort((a,b) => a.totalDurationMins - b.totalDurationMins);
-  return { startName:sName, endName:eName, totalDistanceKm:distKm, nearbyTransport:{busStops:[],metroStations:[]}, routes, journeyId:null, offline:true };
+  return { startName:sName, endName:eName, totalDistanceKm:distKm, currencySymbol, nearbyTransport:{busStops:[],metroStations:[]}, routes, journeyId:null, offline:true };
 }
 
 // Geocoding via server proxy (avoids Nominatim blocking direct mobile requests)
