@@ -870,7 +870,7 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       mode: 'air', from: startAptName, to: endAptName,
       airport: startAptName, iata: apt?.iata || null,
       destAirport: endAptName, destIata: endApt?.iata || null,
-      distanceKm: flightDist.toFixed(2), cost: cost('air', flightDist),
+      distanceKm: flightDist.toFixed(2), cost: cost('air', flightDist, region),
       durationMins: duration('air', flightDist),
       waitMinutes: 150, // ~2.5h check-in + security
       note: airportScheduleNote(apt, endApt),
@@ -878,7 +878,7 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
 
     function legsTotals(legs) {
       return {
-        totalCost: legs.reduce((s, l) => s + (l.cost || 0), 0),
+        totalCost: Math.round(legs.reduce((s, l) => s + (l.cost || 0), 0) * 100) / 100,
         totalDurationMins: legs.reduce((s, l) => s + (l.durationMins || 0) + (l.waitMinutes || 0), 0),
       };
     }
