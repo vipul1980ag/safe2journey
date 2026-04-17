@@ -1018,9 +1018,31 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
 
     // ── Build airport → destination options ────────────────────────────────
     const destOpts = [];
-    const eTrain = nearbyEndTrain[0] || null;
-    const eMetro = nearbyEndMetro[0] || null;
-    const eBus   = nearbyEndBus[0]   || null;
+    let eTrain = nearbyEndTrain[0] || null;
+    let eMetro = nearbyEndMetro[0] || null;
+    let eBus   = nearbyEndBus[0]   || null;
+
+    // Fallback: synthesise typical stops when Overpass returns nothing for the destination region
+    if (!eTrain && !eMetro && !eBus) {
+      if (endRegion === 'europe') {
+        eTrain = { id: 'syn_etrain', name: `${endName} Hauptbahnhof`,  distance: 3.0, source: 'synthetic', line: 'Regional Rail' };
+        eMetro = { id: 'syn_etram',  name: `${endName} Tram Stop`,     distance: 0.4, source: 'synthetic', line: 'Tram' };
+        eBus   = { id: 'syn_ebus',   name: `${endName} Bus Stop`,      distance: 0.3, source: 'synthetic', route_id: '—' };
+      } else if (endRegion === 'south_asia') {
+        // Major Indian cities: airport express train + metro + bus + auto-rickshaw
+        eTrain = { id: 'syn_etrain', name: `${endName} Railway Station`, distance: 5.0, source: 'synthetic', line: 'Indian Railways' };
+        eMetro = { id: 'syn_emetro', name: `${endName} Metro Station`,   distance: 2.0, source: 'synthetic', line: 'Metro' };
+        eBus   = { id: 'syn_ebus',   name: `${endName} Bus Stand`,       distance: 1.0, source: 'synthetic', route_id: '—' };
+      } else if (endRegion === 'southeast_asia') {
+        eMetro = { id: 'syn_emetro', name: `${endName} BTS/MRT Station`, distance: 1.0, source: 'synthetic', line: 'Metro' };
+        eBus   = { id: 'syn_ebus',   name: `${endName} Bus Stop`,        distance: 0.5, source: 'synthetic', route_id: '—' };
+      } else if (endRegion === 'americas') {
+        eBus   = { id: 'syn_ebus',   name: `${endName} Bus Stop`,        distance: 0.5, source: 'synthetic', route_id: '—' };
+      } else if (endRegion === 'east_asia') {
+        eMetro = { id: 'syn_emetro', name: `${endName} Metro Station`,   distance: 0.8, source: 'synthetic', line: 'Metro' };
+        eBus   = { id: 'syn_ebus',   name: `${endName} Bus Stop`,        distance: 0.3, source: 'synthetic', route_id: '—' };
+      }
+    }
 
     // Airport train → local auto/taxi
     if (eTrain) {
