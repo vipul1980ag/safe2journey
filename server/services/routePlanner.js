@@ -3,27 +3,56 @@ const { fetchNearbyTransit } = require('./overpass');
 
 const MODE_SPEEDS_KMH = { bus: 20, metro: 40, walking: 5, taxi: 30, auto: 25, car_bike: 35, tram: 18, train: 80, ferry: 25, air: 700 };
 
-// Universal fare estimation (works globally with sensible defaults)
-function cost(mode, distKm) {
+/**
+ * Fare multiplier relative to India (INR) baseline.
+ * Scales taxi, auto, train, bus, and ferry costs to locally sensible amounts.
+ */
+function regionalFareMultiplier(region) {
+  switch (region) {
+    case 'europe':               return 5.5;
+    case 'americas':             return 5.0;
+    case 'oceania':              return 7.0;
+    case 'east_asia':            return 3.0;
+    case 'middle_east':          return 4.5;
+    case 'africa':               return 0.9;
+    case 'southeast_asia':       return 1.1;
+    case 'russia_central_asia':  return 1.8;
+    case 'south_asia':
+    default:                     return 1.0;
+  }
+}
+
+// Universal fare estimation — region-aware
+function cost(mode, distKm, region = 'south_asia') {
+  const m = regionalFareMultiplier(region);
   switch (mode) {
     case 'walking': return 0;
-    case 'bus':     return Math.max(10, Math.round(10 + distKm * 2));
+    case 'bus':     return Math.round(Math.max(10, 10 + distKm * 2) * m);
     case 'metro':
     case 'tram': {
-      if (distKm <= 2)  return 10;
-      if (distKm <= 5)  return 20;
-      if (distKm <= 12) return 30;
-      if (distKm <= 21) return 40;
-      if (distKm <= 32) return 50;
-      return 60;
+      let base;
+      if (distKm <= 2)  base = 10;
+      else if (distKm <= 5)  base = 20;
+      else if (distKm <= 12) base = 30;
+      else if (distKm <= 21) base = 40;
+      else if (distKm <= 32) base = 50;
+      else base = 60;
+      return Math.round(base * m);
     }
-    case 'auto':     return Math.round(25 + distKm * 11);
-    case 'taxi':     return Math.round(50 + distKm * 14);
-    case 'car_bike': return Math.round(distKm * 7);
-    case 'train':    return Math.max(30, Math.round(30 + distKm * 1.5));
-    case 'ferry':    return Math.max(50, Math.round(50 + distKm * 3));
-    case 'air':      return Math.max(2000, Math.round(1500 + distKm * 5));
-    default:         return Math.round(distKm * 10);
+    case 'auto':     return Math.round((25 + distKm * 11) * m);
+    case 'taxi':     return Math.round((80 + distKm * 18) * m);
+    case 'car_bike': return Math.round(distKm * 8 * m);
+    case 'train': {
+      let base;
+      if (distKm <= 50)       base = Math.max(50,  Math.round(50  + distKm * 2.0));
+      else if (distKm <= 300) base = Math.max(120, Math.round(80  + distKm * 2.5));
+      else if (distKm <= 800) base = Math.max(350, Math.round(100 + distKm * 3.0));
+      else                    base = Math.max(700, Math.round(150 + distKm * 3.5));
+      return Math.round(base * m);
+    }
+    case 'ferry':    return Math.round(Math.max(50, 50 + distKm * 3) * m);
+    case 'air':      return Math.max(2000, Math.round((1500 + distKm * 5) * m));
+    default:         return Math.round(distKm * 10 * m);
   }
 }
 
@@ -296,23 +325,35 @@ function pickBestAirport(osmAirports, region, refLat, refLng, isIntercontinental
     source: 'hub',
   })).sort((a, b) => a.distance - b.distance);
 
+  const nearestHub = globalHubs[0];
+
   if (isIntercontinental) {
-    // For intercontinental routes: always use a major hub — never trust small
-    // airfields or under-construction airports from OSM for long-haul service.
-    return globalHubs[0] || osmAirports[0] || null;
+    // Always use a curated hub for long-haul — never trust small airfields or
+    // under-construction OSM airports for international service.
+    return nearestHub || osmAirports[0] || null;
   }
 
-  // Regional / domestic: prefer nearest OSM airport that has an IATA code
-  // (Overpass already scores these highest, so osmAirports[0] with iata is ideal)
+  // Regional / domestic: prefer the curated hub list over raw OSM airports.
+  // OSM frequently returns military, private, and under-construction airports
+  // (e.g. Hindon, Noida International) that have IATA codes but no scheduled
+  // commercial service.  Only use an OSM airport if it is substantially closer
+  // than the nearest hub (< 60% of the hub's distance).
   const withIata = osmAirports.find(a => a.iata);
+  if (nearestHub && withIata) {
+    const OSM_HUB_RATIO = 0.6;
+    if (nearestHub.distance <= withIata.distance ||
+        withIata.distance > nearestHub.distance * OSM_HUB_RATIO) {
+      return nearestHub;
+    }
+    return withIata;
+  }
   if (withIata) return withIata;
 
-  // Any OSM airport within 50 km (small-country domestic airports)
+  // Any OSM airport within 50 km (small-country domestic airports with no hub nearby)
   const close = osmAirports.find(a => a.distance <= 50);
   if (close) return close;
 
-  // Fallback: globally nearest hub
-  return globalHubs[0] || null;
+  return nearestHub || null;
 }
 
 function distanceKm(lat1, lng1, lat2, lng2) {
@@ -394,6 +435,21 @@ function estimatedSchedule(type, fromDate = null) {
 
 function duration(mode, distKm) {
   return Math.ceil((distKm / (MODE_SPEEDS_KMH[mode] || 20)) * 60);
+}
+
+/**
+ * Generate a human-readable flight schedule note based on airport type.
+ * Hub airports (from curated list) have many daily flights.
+ * OSM-only airports may have limited or no scheduled service.
+ */
+function airportScheduleNote(apt, endApt) {
+  const originNote = (apt && apt.source !== 'osm')
+    ? `${apt.iata ? apt.iata + ' — ' : ''}${apt.name}: major hub, many daily departures`
+    : `${apt?.name || 'Origin airport'}: regional airport — verify flight schedule`;
+  const destNote = (endApt && endApt.source !== 'osm')
+    ? `${endApt.iata ? endApt.iata + ' — ' : ''}${endApt.name}: major hub, many daily arrivals`
+    : `${endApt?.name || 'Destination airport'}: regional airport — verify flight availability`;
+  return `${originNote}. ${destNote}. Allow 2–3 h check-in & security.`;
 }
 
 function getScheduleForStop(stop, type, fromDate) {
@@ -480,10 +536,12 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       const sched = getScheduleForStop(stop, 'bus', fromDate);
       routes.push({
         case: 1, label: 'Direct Bus',
-        legs: [{ mode: 'bus', from: startName, to: endName, stop: stop.name, routeId: stop.route_id,
-          distanceKm: totalDist.toFixed(2), cost: cost('bus', totalDist), durationMins: duration('bus', totalDist),
+        legs: [{ mode: 'bus', from: startName, to: endName,
+          boardingStop: stop.name, alightingStop: nearbyEndBus[0]?.name || endName,
+          stop: stop.name, routeId: stop.route_id,
+          distanceKm: totalDist.toFixed(2), cost: cost('bus', totalDist, region), durationMins: duration('bus', totalDist),
           nextScheduled: sched.next, waitMinutes: sched.waitMinutes, frequency: sched.frequency }],
-        totalCost: cost('bus', totalDist),
+        totalCost: cost('bus', totalDist, region),
         totalDurationMins: duration('bus', totalDist) + (sched.waitMinutes || 0),
         totalDistanceKm: totalDist.toFixed(2),
       });
@@ -494,10 +552,12 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       const sched = getScheduleForStop(station, 'metro', fromDate);
       routes.push({
         case: 1, label: 'Direct Metro',
-        legs: [{ mode: 'metro', from: startName, to: endName, station: station.name, line: station.line,
-          distanceKm: totalDist.toFixed(2), cost: cost('metro', totalDist), durationMins: duration('metro', totalDist),
+        legs: [{ mode: 'metro', from: startName, to: endName,
+          boardingStop: station.name, alightingStop: nearbyEndMetro[0]?.name || endName,
+          station: station.name, line: station.line,
+          distanceKm: totalDist.toFixed(2), cost: cost('metro', totalDist, region), durationMins: duration('metro', totalDist),
           nextScheduled: sched.next, waitMinutes: sched.waitMinutes, frequency: sched.frequency }],
-        totalCost: cost('metro', totalDist),
+        totalCost: cost('metro', totalDist, region),
         totalDurationMins: duration('metro', totalDist) + (sched.waitMinutes || 0),
         totalDistanceKm: totalDist.toFixed(2),
       });
@@ -523,12 +583,14 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       routes.push({
         case: 2, label,
         legs: [
-          { mode: preMode, from: startName, to: stop.name, distanceKm: leg1Dist.toFixed(2), cost: cost(preMode, leg1Dist), durationMins: duration(preMode, leg1Dist) },
-          { mode: 'bus', from: stop.name, to: endName, stop: stop.name, routeId: stop.route_id,
-            distanceKm: leg2Dist.toFixed(2), cost: cost('bus', leg2Dist), durationMins: duration('bus', leg2Dist),
+          { mode: preMode, from: startName, to: stop.name, distanceKm: leg1Dist.toFixed(2), cost: cost(preMode, leg1Dist, region), durationMins: duration(preMode, leg1Dist) },
+          { mode: 'bus', from: stop.name, to: endName,
+            boardingStop: stop.name, alightingStop: nearbyEndBus[0]?.name || endName,
+            stop: stop.name, routeId: stop.route_id,
+            distanceKm: leg2Dist.toFixed(2), cost: cost('bus', leg2Dist, region), durationMins: duration('bus', leg2Dist),
             nextScheduled: sched.next, waitMinutes: sched.waitMinutes, frequency: sched.frequency },
         ],
-        totalCost: cost(preMode, leg1Dist) + cost('bus', leg2Dist),
+        totalCost: cost(preMode, leg1Dist, region) + cost('bus', leg2Dist, region),
         totalDurationMins: duration(preMode, leg1Dist) + (sched.waitMinutes || 0) + duration('bus', leg2Dist),
         totalDistanceKm: totalDist.toFixed(2),
       });
@@ -549,12 +611,14 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       routes.push({
         case: 2, label,
         legs: [
-          { mode: preMode, from: startName, to: station.name, distanceKm: station.distance.toFixed(2), cost: cost(preMode, station.distance), durationMins: duration(preMode, station.distance) },
-          { mode: 'metro', from: station.name, to: endName, station: station.name, line: station.line,
-            distanceKm: mDist.toFixed(2), cost: cost('metro', mDist), durationMins: duration('metro', mDist),
+          { mode: preMode, from: startName, to: station.name, distanceKm: station.distance.toFixed(2), cost: cost(preMode, station.distance, region), durationMins: duration(preMode, station.distance) },
+          { mode: 'metro', from: station.name, to: endName,
+            boardingStop: station.name, alightingStop: nearbyEndMetro[0]?.name || endName,
+            station: station.name, line: station.line,
+            distanceKm: mDist.toFixed(2), cost: cost('metro', mDist, region), durationMins: duration('metro', mDist),
             nextScheduled: mSched.next, waitMinutes: mSched.waitMinutes, frequency: mSched.frequency },
         ],
-        totalCost: cost(preMode, station.distance) + cost('metro', mDist),
+        totalCost: cost(preMode, station.distance, region) + cost('metro', mDist, region),
         totalDurationMins: duration(preMode, station.distance) + (mSched.waitMinutes || 0) + duration('metro', mDist),
         totalDistanceKm: totalDist.toFixed(2),
       });
@@ -583,13 +647,15 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       routes.push({
         case: 3, label,
         legs: [
-          { mode: preMode, from: startName, to: station.name, distanceKm: leg1Dist.toFixed(2), cost: cost(preMode, leg1Dist), durationMins: duration(preMode, leg1Dist) },
-          { mode: 'metro', from: station.name, to: endStop.name, station: station.name, line: station.line,
-            distanceKm: leg2Dist.toFixed(2), cost: cost('metro', leg2Dist), durationMins: duration('metro', leg2Dist),
+          { mode: preMode, from: startName, to: station.name, distanceKm: leg1Dist.toFixed(2), cost: cost(preMode, leg1Dist, region), durationMins: duration(preMode, leg1Dist) },
+          { mode: 'metro', from: station.name, to: endStop.name,
+            boardingStop: station.name, alightingStop: endStop.name,
+            station: station.name, line: station.line,
+            distanceKm: leg2Dist.toFixed(2), cost: cost('metro', leg2Dist, region), durationMins: duration('metro', leg2Dist),
             nextScheduled: mSched.next, waitMinutes: mSched.waitMinutes, frequency: mSched.frequency },
-          { mode: lastLegMode, from: endStop.name, to: endName, distanceKm: leg3Dist.toFixed(2), cost: cost(lastLegMode, leg3Dist), durationMins: duration(lastLegMode, leg3Dist) },
+          { mode: lastLegMode, from: endStop.name, to: endName, distanceKm: leg3Dist.toFixed(2), cost: cost(lastLegMode, leg3Dist, endRegion), durationMins: duration(lastLegMode, leg3Dist) },
         ],
-        totalCost: cost(preMode, leg1Dist) + cost('metro', leg2Dist) + cost(lastLegMode, leg3Dist),
+        totalCost: cost(preMode, leg1Dist, region) + cost('metro', leg2Dist, region) + cost(lastLegMode, leg3Dist, endRegion),
         totalDurationMins: duration(preMode, leg1Dist) + (mSched.waitMinutes || 0) + duration('metro', leg2Dist) + duration(lastLegMode, leg3Dist),
         totalDistanceKm: totalDist.toFixed(2),
       });
@@ -609,13 +675,15 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     routes.push({
       case: 4, label: 'Train',
       legs: [
-        { mode: connectMode, from: startName, to: station.name, distanceKm: leg1Dist.toFixed(2), cost: cost(connectMode, leg1Dist), durationMins: duration(connectMode, leg1Dist) },
-        { mode: 'train', from: station.name, to: destStation, station: station.name, line: station.line,
-          distanceKm: leg2Dist.toFixed(2), cost: cost('train', leg2Dist), durationMins: duration('train', leg2Dist),
+        { mode: connectMode, from: startName, to: station.name, distanceKm: leg1Dist.toFixed(2), cost: cost(connectMode, leg1Dist, region), durationMins: duration(connectMode, leg1Dist) },
+        { mode: 'train', from: station.name, to: destStation,
+          boardingStop: station.name, alightingStop: destStation,
+          station: station.name, line: station.line,
+          distanceKm: leg2Dist.toFixed(2), cost: cost('train', leg2Dist, region), durationMins: duration('train', leg2Dist),
           nextScheduled: null, waitMinutes: 20, frequency: 60 },
-        ...(nearbyEndTrain[0] ? [{ mode: connectMode, from: destStation, to: endName, distanceKm: nearbyEndTrain[0].distance.toFixed(2), cost: cost(connectMode, nearbyEndTrain[0].distance), durationMins: duration(connectMode, nearbyEndTrain[0].distance) }] : []),
+        ...(nearbyEndTrain[0] ? [{ mode: connectMode, from: destStation, to: endName, distanceKm: nearbyEndTrain[0].distance.toFixed(2), cost: cost(connectMode, nearbyEndTrain[0].distance, endRegion), durationMins: duration(connectMode, nearbyEndTrain[0].distance) }] : []),
       ],
-      totalCost: cost(connectMode, leg1Dist) + cost('train', leg2Dist) + (nearbyEndTrain[0] ? cost(connectMode, nearbyEndTrain[0].distance) : 0),
+      totalCost: cost(connectMode, leg1Dist, region) + cost('train', leg2Dist, region) + (nearbyEndTrain[0] ? cost(connectMode, nearbyEndTrain[0].distance, endRegion) : 0),
       totalDurationMins: duration(connectMode, leg1Dist) + 20 + duration('train', leg2Dist) + (nearbyEndTrain[0] ? duration(connectMode, nearbyEndTrain[0].distance) : 0),
       totalDistanceKm: totalDist.toFixed(2),
     });
@@ -631,13 +699,15 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     routes.push({
       case: 4, label: 'Ferry / Ship',
       legs: [
-        { mode: startConnect, from: startName, to: ft.name, distanceKm: leg1Dist.toFixed(2), cost: cost(startConnect, leg1Dist), durationMins: duration(startConnect, leg1Dist) },
-        { mode: 'ferry', from: ft.name, to: nearbyEndFerry[0].name, terminal: ft.name, operator: ft.operator,
-          distanceKm: leg2Dist.toFixed(2), cost: cost('ferry', leg2Dist), durationMins: duration('ferry', leg2Dist),
+        { mode: startConnect, from: startName, to: ft.name, distanceKm: leg1Dist.toFixed(2), cost: cost(startConnect, leg1Dist, region), durationMins: duration(startConnect, leg1Dist) },
+        { mode: 'ferry', from: ft.name, to: nearbyEndFerry[0].name,
+          boardingStop: ft.name, alightingStop: nearbyEndFerry[0].name,
+          terminal: ft.name, operator: ft.operator,
+          distanceKm: leg2Dist.toFixed(2), cost: cost('ferry', leg2Dist, region), durationMins: duration('ferry', leg2Dist),
           nextScheduled: null, waitMinutes: 30, frequency: 120 },
-        { mode: endConnectMode, from: nearbyEndFerry[0].name, to: endName, distanceKm: nearbyEndFerry[0].distance.toFixed(2), cost: cost(endConnectMode, nearbyEndFerry[0].distance), durationMins: duration(endConnectMode, nearbyEndFerry[0].distance) },
+        { mode: endConnectMode, from: nearbyEndFerry[0].name, to: endName, distanceKm: nearbyEndFerry[0].distance.toFixed(2), cost: cost(endConnectMode, nearbyEndFerry[0].distance, endRegion), durationMins: duration(endConnectMode, nearbyEndFerry[0].distance) },
       ],
-      totalCost: cost(startConnect, leg1Dist) + cost('ferry', leg2Dist) + cost(endConnectMode, nearbyEndFerry[0].distance),
+      totalCost: cost(startConnect, leg1Dist, region) + cost('ferry', leg2Dist, region) + cost(endConnectMode, nearbyEndFerry[0].distance, endRegion),
       totalDurationMins: duration(startConnect, leg1Dist) + 30 + duration('ferry', leg2Dist) + duration(endConnectMode, nearbyEndFerry[0].distance),
       totalDistanceKm: totalDist.toFixed(2),
     });
@@ -663,7 +733,7 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       distanceKm: flightDist.toFixed(2), cost: cost('air', flightDist),
       durationMins: duration('air', flightDist),
       waitMinutes: 150, // ~2.5h check-in + security
-      note: `Check airline schedules for ${startAptName} → ${endAptName}. Allow 2–3 h for check-in & security.`,
+      note: airportScheduleNote(apt, endApt),
     };
 
     function legsTotals(legs) {
@@ -688,9 +758,9 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
         originOpts.push({
           label: 'Walk + Tram + Train',
           legs: [
-            { mode: 'walking', from: startName,         to: 'Tram / Bus Stop',  distanceKm: walkDist.toFixed(2),   cost: 0,                      durationMins: duration('walking', walkDist) },
-            { mode: 'tram',    from: 'Tram / Bus Stop', to: sTrain.name,        distanceKm: tramDist.toFixed(2),   cost: cost('tram', tramDist),  durationMins: duration('tram', tramDist),   waitMinutes: 5, frequency: 10, nextScheduled: estimatedSchedule('metro', fromDate).next },
-            { mode: 'train',   from: sTrain.name,       to: startAptName,       distanceKm: trainToApt.toFixed(2), cost: cost('train', trainToApt), durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, note: 'Airport express / regional train' },
+            { mode: 'walking', from: startName,         to: 'Tram / Bus Stop',  distanceKm: walkDist.toFixed(2),   cost: 0,                                  durationMins: duration('walking', walkDist) },
+            { mode: 'tram',    from: 'Tram / Bus Stop', to: sTrain.name,        distanceKm: tramDist.toFixed(2),   cost: cost('tram', tramDist, region),      durationMins: duration('tram', tramDist),   waitMinutes: 5, frequency: 10, nextScheduled: estimatedSchedule('metro', fromDate).next },
+            { mode: 'train',   from: sTrain.name,       to: startAptName,       distanceKm: trainToApt.toFixed(2), cost: cost('train', trainToApt, region),   durationMins: duration('train', trainToApt), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
           ],
         });
         // Bicycle → park at station → Train to airport (Europe only)
@@ -701,7 +771,7 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
             label: 'Bicycle + Train',
             legs: [
               { mode: 'car_bike', from: startName,  to: `${sTrain.name} (Bike Park)`, distanceKm: bikeDist.toFixed(2),    cost: 0, durationMins: duration('car_bike', bikeDist), note: 'Park bicycle at station bike parking (Fahrradstellplatz)' },
-              { mode: 'train',    from: sTrain.name, to: startAptName,                distanceKm: trainToApt2.toFixed(2), cost: cost('train', trainToApt2), durationMins: duration('train', trainToApt2), waitMinutes: 10, frequency: 30, note: 'Airport express / regional train' },
+              { mode: 'train',    from: sTrain.name, to: startAptName,                distanceKm: trainToApt2.toFixed(2), cost: cost('train', trainToApt2, region), durationMins: duration('train', trainToApt2), waitMinutes: 10, frequency: 30, boardingStop: sTrain.name, alightingStop: startAptName, note: 'Airport express / regional train' },
             ],
           });
         }
@@ -711,8 +781,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
         originOpts.push({
           label: 'Walk + Metro',
           legs: [
-            { mode: 'walking', from: startName,    to: sMetro.name,  distanceKm: walkDist.toFixed(2),   cost: 0,                        durationMins: duration('walking', walkDist) },
-            { mode: 'metro',   from: sMetro.name,  to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt), durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, nextScheduled: estimatedSchedule('metro', fromDate).next, note: 'Metro / subway to airport' },
+            { mode: 'walking', from: startName,    to: sMetro.name,  distanceKm: walkDist.toFixed(2),   cost: 0,                                  durationMins: duration('walking', walkDist) },
+            { mode: 'metro',   from: sMetro.name,  to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt, region),   durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, boardingStop: sMetro.name, alightingStop: startAptName, nextScheduled: estimatedSchedule('metro', fromDate).next, note: 'Metro / subway to airport' },
           ],
         });
       } else if (sBus) {
@@ -721,8 +791,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
         originOpts.push({
           label: 'Walk + Bus',
           legs: [
-            { mode: 'walking', from: startName,   to: sBus.name,    distanceKm: walkDist.toFixed(2), cost: 0,                      durationMins: duration('walking', walkDist) },
-            { mode: 'bus',     from: sBus.name,   to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt),  durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, note: 'Airport bus / shuttle' },
+            { mode: 'walking', from: startName,   to: sBus.name,    distanceKm: walkDist.toFixed(2), cost: 0,                                durationMins: duration('walking', walkDist) },
+            { mode: 'bus',     from: sBus.name,   to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt, region),    durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, boardingStop: sBus.name, alightingStop: startAptName, note: 'Airport bus / shuttle' },
           ],
         });
       }
@@ -733,8 +803,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
         originOpts.push({
           label: `${autoName} + Metro`,
           legs: [
-            { mode: 'auto',  from: startName,   to: sMetro.name,  distanceKm: autoDist.toFixed(2),   cost: cost('auto', autoDist),   durationMins: duration('auto', autoDist) },
-            { mode: 'metro', from: sMetro.name, to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt), durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, nextScheduled: estimatedSchedule('metro', fromDate).next },
+            { mode: 'auto',  from: startName,   to: sMetro.name,  distanceKm: autoDist.toFixed(2),   cost: cost('auto', autoDist, region),    durationMins: duration('auto', autoDist) },
+            { mode: 'metro', from: sMetro.name, to: startAptName, distanceKm: metroToApt.toFixed(2), cost: cost('metro', metroToApt, region),  durationMins: duration('metro', metroToApt), waitMinutes: 4, frequency: 5, boardingStop: sMetro.name, alightingStop: startAptName, nextScheduled: estimatedSchedule('metro', fromDate).next },
           ],
         });
       } else if (sBus) {
@@ -743,8 +813,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
         originOpts.push({
           label: `${autoName} + Bus`,
           legs: [
-            { mode: 'auto', from: startName, to: sBus.name,    distanceKm: autoDist.toFixed(2), cost: cost('auto', autoDist), durationMins: duration('auto', autoDist) },
-            { mode: 'bus',  from: sBus.name, to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt),  durationMins: duration('bus', busToApt),  waitMinutes: 10, frequency: 20, note: 'Airport bus' },
+            { mode: 'auto', from: startName, to: sBus.name,    distanceKm: autoDist.toFixed(2), cost: cost('auto', autoDist, region),   durationMins: duration('auto', autoDist) },
+            { mode: 'bus',  from: sBus.name, to: startAptName, distanceKm: busToApt.toFixed(2), cost: cost('bus', busToApt, region),    durationMins: duration('bus', busToApt), waitMinutes: 10, frequency: 20, boardingStop: sBus.name, alightingStop: startAptName, note: 'Airport bus' },
           ],
         });
       }
@@ -753,7 +823,7 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     originOpts.push({
       label: 'Taxi to Airport',
       legs: [
-        { mode: 'taxi', from: startName, to: startAptName, distanceKm: aptDist.toFixed(2), cost: cost('taxi', aptDist), durationMins: duration('taxi', aptDist) },
+        { mode: 'taxi', from: startName, to: startAptName, distanceKm: aptDist.toFixed(2), cost: cost('taxi', aptDist, region), durationMins: duration('taxi', aptDist) },
       ],
     });
 
@@ -770,8 +840,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       destOpts.push({
         label: `Train + ${endShowAuto ? autoName : 'Taxi'}`,
         legs: [
-          { mode: 'train',       from: endAptName,  to: eTrain.name, distanceKm: trainDist.toFixed(2), cost: cost('train', trainDist), durationMins: duration('train', trainDist), waitMinutes: 15, frequency: 60, note: 'Airport express / regional train to city' },
-          { mode: endConnectMode, from: eTrain.name, to: endName,     distanceKm: lastDist.toFixed(2),  cost: cost(endConnectMode, lastDist), durationMins: duration(endConnectMode, lastDist) },
+          { mode: 'train',        from: endAptName,  to: eTrain.name, distanceKm: trainDist.toFixed(2), cost: cost('train', trainDist, endRegion),        durationMins: duration('train', trainDist), waitMinutes: 15, frequency: 60, boardingStop: endAptName, alightingStop: eTrain.name, note: 'Airport express / regional train to city' },
+          { mode: endConnectMode, from: eTrain.name,  to: endName,     distanceKm: lastDist.toFixed(2),  cost: cost(endConnectMode, lastDist, endRegion),  durationMins: duration(endConnectMode, lastDist) },
         ],
       });
     }
@@ -782,8 +852,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       destOpts.push({
         label: `Metro + ${endShowAuto ? autoName : 'Taxi'}`,
         legs: [
-          { mode: 'metro',       from: endAptName,  to: eMetro.name, distanceKm: metroDist.toFixed(2), cost: cost('metro', metroDist), durationMins: duration('metro', metroDist), waitMinutes: 4, frequency: 5, nextScheduled: estimatedSchedule('metro', fromDate).next },
-          { mode: endConnectMode, from: eMetro.name, to: endName,     distanceKm: lastDist.toFixed(2),  cost: cost(endConnectMode, lastDist), durationMins: duration(endConnectMode, lastDist) },
+          { mode: 'metro',        from: endAptName,  to: eMetro.name, distanceKm: metroDist.toFixed(2), cost: cost('metro', metroDist, endRegion),        durationMins: duration('metro', metroDist), waitMinutes: 4, frequency: 5, boardingStop: endAptName, alightingStop: eMetro.name, nextScheduled: estimatedSchedule('metro', fromDate).next },
+          { mode: endConnectMode, from: eMetro.name,  to: endName,     distanceKm: lastDist.toFixed(2),  cost: cost(endConnectMode, lastDist, endRegion),  durationMins: duration(endConnectMode, lastDist) },
         ],
       });
     }
@@ -794,8 +864,8 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
       destOpts.push({
         label: `Bus + ${endShowAuto ? autoName : 'Taxi'}`,
         legs: [
-          { mode: 'bus',         from: endAptName, to: eBus.name, distanceKm: busDist.toFixed(2),  cost: cost('bus', busDist),  durationMins: duration('bus', busDist),  waitMinutes: 15, frequency: 30, note: 'Airport bus to city centre' },
-          { mode: endConnectMode, from: eBus.name,  to: endName,   distanceKm: lastDist.toFixed(2), cost: cost(endConnectMode, lastDist), durationMins: duration(endConnectMode, lastDist) },
+          { mode: 'bus',          from: endAptName, to: eBus.name, distanceKm: busDist.toFixed(2),  cost: cost('bus', busDist, endRegion),           durationMins: duration('bus', busDist),  waitMinutes: 15, frequency: 30, boardingStop: endAptName, alightingStop: eBus.name, note: 'Airport bus to city centre' },
+          { mode: endConnectMode, from: eBus.name,  to: endName,   distanceKm: lastDist.toFixed(2), cost: cost(endConnectMode, lastDist, endRegion),  durationMins: duration(endConnectMode, lastDist) },
         ],
       });
     }
@@ -803,7 +873,7 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
     destOpts.push({
       label: 'Taxi from Airport',
       legs: [
-        { mode: 'taxi', from: endAptName, to: endName, distanceKm: endAptDist.toFixed(2), cost: cost('taxi', endAptDist), durationMins: duration('taxi', endAptDist) },
+        { mode: 'taxi', from: endAptName, to: endName, distanceKm: endAptDist.toFixed(2), cost: cost('taxi', endAptDist, endRegion), durationMins: duration('taxi', endAptDist) },
       ],
     });
 
@@ -835,22 +905,22 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
   if (showAuto && totalDist <= MOTOR_MAX.auto) {
     routes.push({
       case: 0, label: `Direct ${autoName}`,
-      legs: [{ mode: 'auto', from: startName, to: endName, distanceKm: totalDist.toFixed(2), cost: cost('auto', totalDist), durationMins: duration('auto', totalDist) }],
-      totalCost: cost('auto', totalDist), totalDurationMins: duration('auto', totalDist), totalDistanceKm: totalDist.toFixed(2),
+      legs: [{ mode: 'auto', from: startName, to: endName, distanceKm: totalDist.toFixed(2), cost: cost('auto', totalDist, region), durationMins: duration('auto', totalDist) }],
+      totalCost: cost('auto', totalDist, region), totalDurationMins: duration('auto', totalDist), totalDistanceKm: totalDist.toFixed(2),
     });
   }
   if (totalDist <= MOTOR_MAX.taxi) {
     routes.push({
       case: 0, label: 'Taxi / Cab',
-      legs: [{ mode: 'taxi', from: startName, to: endName, distanceKm: totalDist.toFixed(2), cost: cost('taxi', totalDist), durationMins: duration('taxi', totalDist) }],
-      totalCost: cost('taxi', totalDist), totalDurationMins: duration('taxi', totalDist), totalDistanceKm: totalDist.toFixed(2),
+      legs: [{ mode: 'taxi', from: startName, to: endName, distanceKm: totalDist.toFixed(2), cost: cost('taxi', totalDist, region), durationMins: duration('taxi', totalDist) }],
+      totalCost: cost('taxi', totalDist, region), totalDurationMins: duration('taxi', totalDist), totalDistanceKm: totalDist.toFixed(2),
     });
   }
   if (totalDist <= MOTOR_MAX.car_bike) {
     routes.push({
       case: 0, label: 'Car / Bike',
-      legs: [{ mode: 'car_bike', from: startName, to: endName, distanceKm: totalDist.toFixed(2), cost: cost('car_bike', totalDist), durationMins: duration('car_bike', totalDist) }],
-      totalCost: cost('car_bike', totalDist), totalDurationMins: duration('car_bike', totalDist), totalDistanceKm: totalDist.toFixed(2),
+      legs: [{ mode: 'car_bike', from: startName, to: endName, distanceKm: totalDist.toFixed(2), cost: cost('car_bike', totalDist, region), durationMins: duration('car_bike', totalDist) }],
+      totalCost: cost('car_bike', totalDist, region), totalDurationMins: duration('car_bike', totalDist), totalDistanceKm: totalDist.toFixed(2),
     });
   }
   if (totalDist <= 5) {
@@ -901,4 +971,4 @@ async function planJourney({ startLat, startLng, startName, endLat, endLng, endN
   };
 }
 
-module.exports = { planJourney, getNearbyBusStops, getNearbyMetroStations, distanceKm };
+module.exports = { planJourney, getNearbyBusStops, getNearbyMetroStations, distanceKm, regionalFareMultiplier };

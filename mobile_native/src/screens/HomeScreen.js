@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -49,8 +49,13 @@ export default function HomeScreen({ navigation }) {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
+    <View style={styles.outer}>
       <StatusBar barStyle="light-content" backgroundColor="#1565C0" />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}
+        showsVerticalScrollIndicator={false}
+      >
 
       {/* Top bar */}
       <View style={styles.topBar}>
@@ -159,13 +164,16 @@ export default function HomeScreen({ navigation }) {
         ))}
       </View>
       <Text style={styles.modesLabel}>Bus · Metro · Walk · Taxi · Auto · Car</Text>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  outer: {
     flex: 1, backgroundColor: '#1565C0',
+  },
+  container: {
     alignItems: 'center', padding: 24,
   },
   topBar: {
