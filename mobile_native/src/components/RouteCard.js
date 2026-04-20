@@ -2,16 +2,16 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 
 const MODE_COLORS = {
-  bus: '#1976D2',
-  metro: '#7B1FA2',
-  tram: '#7B1FA2',
-  walking: '#388E3C',
-  taxi: '#F57C00',
-  auto: '#00796B',
-  car_bike: '#455A64',
-  train: '#C62828',
-  ferry: '#0277BD',
-  air: '#558B2F',
+  bus: '#4A90E2',
+  metro: '#9B59B6',
+  tram: '#9B59B6',
+  walking: '#2ECC71',
+  taxi: '#F39C12',
+  auto: '#1ABC9C',
+  car_bike: '#7F8C8D',
+  train: '#E74C3C',
+  ferry: '#3498DB',
+  air: '#27AE60',
 };
 
 const MODE_ICONS = {
@@ -74,7 +74,7 @@ export default function RouteCard({ route, onSelect, currencySymbol: propSymbol 
       <View style={styles.legs}>
         {route.legs.map((leg, i) => {
           const sym = leg.currencySymbol || currencySymbol;
-          const color = MODE_COLORS[leg.mode] || '#999';
+          const color = MODE_COLORS[leg.mode] || '#6B97F5';
           const hasBooking = !!leg.bookingUrl;
           return (
             <View key={i} style={styles.leg}>
@@ -83,7 +83,7 @@ export default function RouteCard({ route, onSelect, currencySymbol: propSymbol 
               </View>
               <View style={styles.legInfo}>
                 <View style={styles.legHeader}>
-                  <Text style={styles.modeName}>{MODE_LABELS[leg.mode]}</Text>
+                  <Text style={[styles.modeName, { color }]}>{MODE_LABELS[leg.mode]}</Text>
                   {hasBooking && (
                     <TouchableOpacity
                       style={[styles.bookBtn, { backgroundColor: color }]}
@@ -99,9 +99,9 @@ export default function RouteCard({ route, onSelect, currencySymbol: propSymbol 
                 {leg.nextScheduled ? (
                   <Text style={styles.schedule}>Next: {leg.nextScheduled} · every {leg.frequency} min</Text>
                 ) : null}
-                {leg.note ? <Text style={[styles.meta, { color: '#1565C0' }]}>{leg.note}</Text> : null}
+                {leg.note ? <Text style={[styles.meta, { color: '#6B97F5' }]}>{leg.note}</Text> : null}
                 {leg.routeId ? <Text style={styles.meta}>Route {leg.routeId}</Text> : null}
-                {leg.line ? <Text style={[styles.meta, { color: '#7B1FA2' }]}>{leg.line}</Text> : null}
+                {leg.line ? <Text style={[styles.meta, { color: '#9B59B6' }]}>{leg.line}</Text> : null}
               </View>
             </View>
           );
@@ -122,72 +122,57 @@ export default function RouteCard({ route, onSelect, currencySymbol: propSymbol 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 18,
+    padding: 18,
     marginBottom: 14,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  label: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', flex: 1 },
-  badges: { flexDirection: 'column', gap: 4, alignItems: 'flex-end' },
+  label: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
+  badges: { flexDirection: 'column', gap: 5, alignItems: 'flex-end' },
   badge: {
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    backgroundColor: 'rgba(58,107,232,0.2)',
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(58,107,232,0.3)',
   },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
-  timeBadge: { backgroundColor: '#E8F5E9' },
-  timeBadgeText: { color: '#2E7D32' },
-  legs: { borderLeftWidth: 2, borderLeftColor: '#E0E0E0', marginLeft: 14, paddingLeft: 14 },
-  leg: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-start' },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#6B97F5' },
+  timeBadge: { backgroundColor: 'rgba(0,214,143,0.15)', borderColor: 'rgba(0,214,143,0.3)' },
+  timeBadgeText: { color: '#00D68F' },
+  legs: { borderLeftWidth: 2, borderLeftColor: 'rgba(255,255,255,0.08)', marginLeft: 14, paddingLeft: 14 },
+  leg: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-start' },
   dot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -29,
-    marginRight: 10,
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: -29, marginRight: 10,
   },
   dotIcon: { fontSize: 16 },
   legInfo: { flex: 1 },
   legHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  modeName: { fontSize: 14, fontWeight: '700', color: '#333' },
-  bookBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
+  modeName: { fontSize: 14, fontWeight: '700' },
+  bookBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   bookBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-  legDetail: { fontSize: 12, color: '#666', marginTop: 2 },
-  schedule: { fontSize: 11, color: '#1565C0', marginTop: 2 },
-  meta: { fontSize: 11, color: '#999', marginTop: 1 },
+  legDetail: { fontSize: 12, color: '#4A6284', marginTop: 2 },
+  schedule: { fontSize: 11, color: '#6B97F5', marginTop: 2 },
+  meta: { fontSize: 11, color: '#2E4060', marginTop: 1 },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  dist: { fontSize: 12, color: '#999' },
+  dist: { fontSize: 12, color: '#2E4060' },
   selectBtn: {
-    backgroundColor: '#1565C0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: '#3A6BE8',
+    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
+    borderWidth: 1, borderColor: '#6B97F5',
   },
   selectBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

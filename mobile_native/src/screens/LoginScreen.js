@@ -35,35 +35,38 @@ export default function LoginScreen({ navigation }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#080F1E' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+        <Text style={styles.shield}>🛡️</Text>
         <Text style={styles.brand}>Safe2Journey</Text>
         <Text style={styles.subtitle}>Smart multi-modal journey planner</Text>
 
-        <View style={styles.tabs}>
-          <TouchableOpacity style={[styles.tabBtn, tab === 'login' && styles.tabActive]} onPress={() => setTab('login')}>
-            <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>Login</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabBtn, tab === 'register' && styles.tabActive]} onPress={() => setTab('register')}>
-            <Text style={[styles.tabText, tab === 'register' && styles.tabTextActive]}>Register</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={styles.formCard}>
+          <View style={styles.tabs}>
+            <TouchableOpacity style={[styles.tabBtn, tab === 'login' && styles.tabActive]} onPress={() => setTab('login')}>
+              <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>Login</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tabBtn, tab === 'register' && styles.tabActive]} onPress={() => setTab('register')}>
+              <Text style={[styles.tabText, tab === 'register' && styles.tabTextActive]}>Register</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.form}>
-          {tab === 'register' && (
-            <TextInput style={styles.input} placeholder="Full Name" value={name} onChangeText={setName}
-              placeholderTextColor="#aaa" autoCapitalize="words" />
-          )}
-          <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail}
-            placeholderTextColor="#aaa" keyboardType="email-address" autoCapitalize="none" />
-          <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword}
-            placeholderTextColor="#aaa" secureTextEntry />
-
-          <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : (
-              <Text style={styles.submitText}>{tab === 'login' ? 'Login' : 'Create Account'}</Text>
+          <View style={styles.form}>
+            {tab === 'register' && (
+              <TextInput style={styles.input} placeholder="Full Name" value={name} onChangeText={setName}
+                placeholderTextColor="#3D5A7A" autoCapitalize="words" />
             )}
-          </TouchableOpacity>
+            <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail}
+              placeholderTextColor="#3D5A7A" keyboardType="email-address" autoCapitalize="none" />
+            <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword}
+              placeholderTextColor="#3D5A7A" secureTextEntry />
+
+            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={loading}>
+              {loading ? <ActivityIndicator color="#fff" /> : (
+                <Text style={styles.submitText}>{tab === 'login' ? 'Login' : 'Create Account'}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <TouchableOpacity style={styles.guestBtn} onPress={() => navigation.navigate('Home')}>
@@ -75,24 +78,41 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1565C0' },
+  container: { flex: 1, backgroundColor: '#080F1E' },
   content: { padding: 28, paddingTop: 80, minHeight: '100%', alignItems: 'center' },
-  brand: { fontSize: 36, fontWeight: '800', color: '#fff', letterSpacing: 1 },
-  subtitle: { fontSize: 14, color: '#BBDEFB', marginTop: 6, marginBottom: 40 },
-  tabs: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 4, marginBottom: 24, width: '100%' },
-  tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 9 },
-  tabActive: { backgroundColor: '#fff' },
-  tabText: { fontWeight: '700', color: 'rgba(255,255,255,0.7)', fontSize: 15 },
-  tabTextActive: { color: '#1565C0' },
-  form: { width: '100%', gap: 12 },
+  shield: { fontSize: 52, marginBottom: 12 },
+  brand: { fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 1 },
+  subtitle: { fontSize: 14, color: '#4A6284', marginTop: 8, marginBottom: 36, letterSpacing: 0.4 },
+
+  formCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 24, padding: 24,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14, padding: 4, marginBottom: 24,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+  },
+  tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  tabActive: { backgroundColor: '#3A6BE8' },
+  tabText: { fontWeight: '700', color: 'rgba(255,255,255,0.4)', fontSize: 15 },
+  tabTextActive: { color: '#fff' },
+  form: { gap: 12 },
   input: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, fontSize: 15, color: '#222',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 14, padding: 16,
+    fontSize: 15, color: '#fff',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     marginBottom: 4,
   },
   submitBtn: {
-    backgroundColor: '#0D47A1', borderRadius: 12, padding: 18, alignItems: 'center', marginTop: 8,
+    backgroundColor: '#3A6BE8', borderRadius: 14, padding: 18, alignItems: 'center', marginTop: 8,
+    borderWidth: 1, borderColor: '#6B97F5',
   },
   submitText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   guestBtn: { marginTop: 28, padding: 12 },
-  guestText: { color: 'rgba(255,255,255,0.6)', fontSize: 14, textDecorationLine: 'underline' },
+  guestText: { color: 'rgba(255,255,255,0.3)', fontSize: 14, textDecorationLine: 'underline' },
 });

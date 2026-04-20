@@ -50,10 +50,10 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.outer}>
-      <StatusBar barStyle="light-content" backgroundColor="#1565C0" />
+      <StatusBar barStyle="light-content" backgroundColor="#080F1E" />
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
 
@@ -78,11 +78,12 @@ export default function HomeScreen({ navigation }) {
 
       {/* Hero */}
       <View style={styles.hero}>
+        <Text style={styles.heroShield}>🛡️</Text>
         <Text style={styles.appName}>Safe2Journey</Text>
         <Text style={styles.tagline}>Smart multi-modal journey planner</Text>
       </View>
 
-      {/* Safety ON/OFF toggle — the flagship feature */}
+      {/* Safety ON/OFF toggle */}
       <TouchableOpacity
         style={[styles.safetyToggle, safetyOn ? styles.safetyToggleOn : styles.safetyToggleOff]}
         onPress={handleSafetyToggle}
@@ -120,7 +121,7 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      {/* Plan cards */}
+      {/* Plan cards — side by side */}
       <View style={styles.cards}>
         <TouchableOpacity
           style={[styles.card, styles.cardGps]}
@@ -128,8 +129,8 @@ export default function HomeScreen({ navigation }) {
           activeOpacity={0.85}
         >
           <Text style={styles.cardIcon}>📍</Text>
-          <Text style={styles.cardTitle}>Track My Location & Plan</Text>
-          <Text style={styles.cardDesc}>Auto-detect your location and enter only the destination</Text>
+          <Text style={styles.cardTitle}>Track My Location</Text>
+          <Text style={styles.cardDesc}>Auto-detect your location & enter destination</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -139,7 +140,7 @@ export default function HomeScreen({ navigation }) {
         >
           <Text style={styles.cardIcon}>✏️</Text>
           <Text style={styles.cardTitle}>Manual Entry</Text>
-          <Text style={styles.cardDesc}>Enter both start and destination manually</Text>
+          <Text style={styles.cardDesc}>Enter start and destination manually</Text>
         </TouchableOpacity>
       </View>
 
@@ -160,7 +161,9 @@ export default function HomeScreen({ navigation }) {
       {/* Transport modes */}
       <View style={styles.modesRow}>
         {['🚌', '🚇', '🚶', '🚕', '🛺', '🚗'].map((icon, i) => (
-          <Text key={i} style={styles.modeIcon}>{icon}</Text>
+          <View key={i} style={styles.modePill}>
+            <Text style={styles.modeIcon}>{icon}</Text>
+          </View>
         ))}
       </View>
       <Text style={styles.modesLabel}>Bus · Metro · Walk · Taxi · Auto · Car</Text>
@@ -170,70 +173,92 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  outer: {
-    flex: 1, backgroundColor: '#1565C0',
-  },
-  container: {
-    alignItems: 'center', padding: 24,
-  },
+  outer: { flex: 1, backgroundColor: '#080F1E' },
+  container: { alignItems: 'center', paddingHorizontal: 20 },
+
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingTop: 52, paddingBottom: 8,
   },
-  userBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  userIcon: { fontSize: 14 },
-  userName: { fontSize: 13, color: '#BBDEFB', fontWeight: '600' },
-  loginBtn: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  userBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 22,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  userIcon: { fontSize: 13 },
+  userName: { fontSize: 13, color: '#8BAFD4', fontWeight: '600' },
+  loginBtn: {
+    backgroundColor: '#3A6BE8', paddingHorizontal: 18, paddingVertical: 9, borderRadius: 22,
+  },
   loginBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   logoutBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-  logoutText: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
-  hero: { alignItems: 'center', marginBottom: 16, marginTop: 40 },
-  appName: { fontSize: 34, fontWeight: '800', color: '#fff', letterSpacing: 1 },
-  tagline: { fontSize: 14, color: '#BBDEFB', marginTop: 4 },
+  logoutText: { color: 'rgba(255,255,255,0.3)', fontSize: 12 },
 
-  // Safety toggle
+  hero: { alignItems: 'center', marginBottom: 20, marginTop: 44 },
+  heroShield: { fontSize: 54, marginBottom: 10 },
+  appName: { fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 1 },
+  tagline: { fontSize: 14, color: '#4A6284', marginTop: 8, letterSpacing: 0.5 },
+
   safetyToggle: {
-    width: '100%', borderRadius: 16, padding: 16,
+    width: '100%', borderRadius: 20, padding: 20,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6, borderWidth: 1.5,
   },
-  safetyToggleOn:  { backgroundColor: '#1B5E20' },
-  safetyToggleOff: { backgroundColor: 'rgba(255,255,255,0.12)' },
-  safetyLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  safetyIcon: { fontSize: 28 },
-  safetyLabel: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  safetySubLabel: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
-  safetyDot: { width: 16, height: 16, borderRadius: 8 },
-  safetyDotOn:  { backgroundColor: '#69F0AE' },
-  safetyDotOff: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  lastAlertRow: { alignSelf: 'flex-start', marginBottom: 2, paddingHorizontal: 4 },
-  lastAlertText: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
-  safetySetupLink: { alignSelf: 'flex-start', paddingVertical: 6, marginBottom: 10 },
-  safetySetupText: { fontSize: 12, color: '#90CAF9', textDecorationLine: 'underline' },
+  safetyToggleOn: {
+    backgroundColor: 'rgba(0,214,143,0.1)',
+    borderColor: 'rgba(0,214,143,0.45)',
+  },
+  safetyToggleOff: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  safetyLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  safetyIcon: { fontSize: 30 },
+  safetyLabel: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  safetySubLabel: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 3 },
+  safetyDot: { width: 18, height: 18, borderRadius: 9 },
+  safetyDotOn: { backgroundColor: '#00D68F' },
+  safetyDotOff: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  lastAlertRow: { alignSelf: 'flex-start', marginBottom: 4, paddingHorizontal: 4 },
+  lastAlertText: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  safetySetupLink: { alignSelf: 'flex-start', paddingVertical: 8, marginBottom: 18 },
+  safetySetupText: { fontSize: 13, color: '#3A6BE8', textDecorationLine: 'underline' },
 
-  // Plan cards
-  cards: { width: '100%', gap: 12, marginBottom: 12 },
-  card: { borderRadius: 16, padding: 18, alignItems: 'flex-start' },
-  cardGps: { backgroundColor: '#fff' },
-  cardManual: { backgroundColor: '#E3F2FD' },
-  cardIcon: { fontSize: 28, marginBottom: 6 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', marginBottom: 4 },
-  cardDesc: { fontSize: 13, color: '#555', lineHeight: 18 },
+  cards: { width: '100%', flexDirection: 'row', gap: 12, marginBottom: 14 },
+  card: { flex: 1, borderRadius: 20, padding: 18, borderWidth: 1 },
+  cardGps: { backgroundColor: '#3A6BE8', borderColor: '#6B97F5' },
+  cardManual: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)' },
+  cardIcon: { fontSize: 28, marginBottom: 10 },
+  cardTitle: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 6 },
+  cardDesc: { fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 17 },
 
   historyBtn: {
-    width: '100%', backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
   aiBtn: {
-    width: '100%', backgroundColor: 'rgba(21,101,192,0.35)',
-    borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18,
-    borderWidth: 1, borderColor: 'rgba(144,202,249,0.4)',
+    width: '100%',
+    backgroundColor: 'rgba(108,99,255,0.14)',
+    borderRadius: 16, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 26,
+    borderWidth: 1, borderColor: 'rgba(108,99,255,0.28)',
   },
-  historyIcon: { fontSize: 18 },
-  historyText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
-  historyArrow: { color: 'rgba(255,255,255,0.5)', fontSize: 22 },
-  modesRow: { flexDirection: 'row', gap: 12 },
-  modeIcon: { fontSize: 20 },
-  modesLabel: { color: '#90CAF9', fontSize: 12, marginTop: 6, letterSpacing: 0.5 },
+  historyIcon: { fontSize: 20 },
+  historyText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 15 },
+  historyArrow: { color: 'rgba(255,255,255,0.3)', fontSize: 22 },
+
+  modesRow: { flexDirection: 'row', gap: 8 },
+  modePill: {
+    paddingHorizontal: 10, paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modeIcon: { fontSize: 18 },
+  modesLabel: { color: '#2E4060', fontSize: 12, marginTop: 10, letterSpacing: 0.6 },
 });

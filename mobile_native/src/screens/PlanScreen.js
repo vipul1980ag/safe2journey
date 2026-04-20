@@ -18,7 +18,6 @@ const PREF_MODES = [
   { key: 'air',     label: 'Air',         icon: '✈' },
 ];
 
-// Detect region from coordinates
 function detectRegion(lat, lng) {
   if (lat >= 34 && lat <= 72 && lng >= -25 && lng <= 45)   return 'europe';
   if (lat >= 15 && lat <= 84 && lng >= -168 && lng <= -50) return 'americas';
@@ -77,7 +76,7 @@ function offlineFare(mode, distKm, region) {
       if (mode === 'bus')  return Math.round(Math.max(15, 12 + d * 1.5));
       if (mode === 'metro') return d <= 5 ? 25 : Math.round(35 + d * 2);
       return 0;
-    default: // south_asia
+    default:
       if (mode === 'taxi') return Math.round(Math.max(60, 50 + d * 14));
       if (mode === 'auto') return Math.round(Math.max(30, 30 + d * 12));
       if (mode === 'car_bike') return Math.round(d * 6);
@@ -90,7 +89,6 @@ function offlineFare(mode, distKm, region) {
   }
 }
 
-// Client-side fallback route planner — works without a server
 function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
   const R = 6371;
   const dLat = (eLat - sLat) * Math.PI / 180;
@@ -105,9 +103,6 @@ function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
   function dur(speed) { return Math.ceil((distKm / speed) * 60); }
   function fare(mode) { return offlineFare(mode, distKm, region); }
 
-  function leg(mode, from, to, extra = {}) {
-    return { mode, from, to, distanceKm: distKm, cost: fare(mode), durationMins: dur(mode === 'taxi' ? 30 : mode === 'car_bike' ? 35 : mode === 'auto' ? 25 : mode === 'bus' ? 20 : 40), currencySymbol, ...extra };
-  }
   function mkRoute(label, c, legMode, durationMins, extra = {}) {
     const f = fare(legMode);
     return { case: c, label, currencySymbol, legs: [{ mode: legMode, from: sName, to: eName, distanceKm: distKm, cost: f, durationMins, currencySymbol }], totalCost: f, totalDurationMins: durationMins, totalDistanceKm: distKm, ...extra };
@@ -130,7 +125,6 @@ function buildOfflineRoutes(sLat, sLng, sName, eLat, eLng, eName, maxModes) {
   return { startName:sName, endName:eName, totalDistanceKm:distKm, currencySymbol, nearbyTransport:{busStops:[],metroStations:[]}, routes, journeyId:null, offline:true };
 }
 
-// Geocoding via server proxy (avoids Nominatim blocking direct mobile requests)
 async function searchNominatim(query) {
   try {
     return await geocodeSearch(query);
@@ -149,7 +143,7 @@ export default function PlanScreen({ route, navigation }) {
   const [endLat, setEndLat]       = useState('');
   const [endLng, setEndLng]       = useState('');
   const [maxModes, setMaxModes]       = useState(2);
-  const [preferredModes, setPreferredModes] = useState(PREF_MODES.map(m => m.key)); // all on
+  const [preferredModes, setPreferredModes] = useState(PREF_MODES.map(m => m.key));
   const [loading, setLoading]     = useState(false);
   const [locating, setLocating]   = useState(false);
 
@@ -262,7 +256,6 @@ export default function PlanScreen({ route, navigation }) {
   async function handlePlan() {
     setLoading(true);
 
-    // Auto-geocode if user typed but didn't pick from suggestions
     let sLat = startLat, sLng = startLng, sName = startName;
     let eLat = endLat,   eLng = endLng,   eName = endName;
 
@@ -308,7 +301,6 @@ export default function PlanScreen({ route, navigation }) {
           preferredModes,
         });
       } catch {
-        // Server unreachable — use client-side fallback so user always gets routes
         result = buildOfflineRoutes(
           parseFloat(sLat), parseFloat(sLng), sName,
           parseFloat(eLat), parseFloat(eLng), eName,
@@ -330,8 +322,11 @@ export default function PlanScreen({ route, navigation }) {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
 
-      {/* ── Start location ── */}
-      <Text style={styles.section}>Start Location</Text>
+      {/* Start location */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionDot} />
+        <Text style={styles.section}>Start Location</Text>
+      </View>
       {inputMode === 'gps' ? (
         <View style={styles.gpsBox}>
           <Text style={styles.gpsText}>
@@ -349,9 +344,9 @@ export default function PlanScreen({ route, navigation }) {
               placeholder="Search anywhere in the world…"
               value={startName}
               onChangeText={onStartChange}
-              placeholderTextColor="#aaa"
+              placeholderTextColor="#3D5A7A"
             />
-            {startSearching && <ActivityIndicator style={styles.inputSpinner} color="#1565C0" />}
+            {startSearching && <ActivityIndicator style={styles.inputSpinner} color="#3A6BE8" />}
           </View>
           {startLat ? <Text style={styles.coordHint}>📍 {parseFloat(startLat).toFixed(5)}, {parseFloat(startLng).toFixed(5)}</Text> : null}
           {startSuggestions.map((loc, i) => (
@@ -362,8 +357,11 @@ export default function PlanScreen({ route, navigation }) {
         </View>
       )}
 
-      {/* ── Destination ── */}
-      <Text style={styles.section}>Destination</Text>
+      {/* Destination */}
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionDot, { backgroundColor: '#00D68F' }]} />
+        <Text style={styles.section}>Destination</Text>
+      </View>
       <View>
         <View style={styles.inputRow}>
           <TextInput
@@ -371,9 +369,9 @@ export default function PlanScreen({ route, navigation }) {
             placeholder="Search anywhere in the world…"
             value={endName}
             onChangeText={onEndChange}
-            placeholderTextColor="#aaa"
+            placeholderTextColor="#3D5A7A"
           />
-          {endSearching && <ActivityIndicator style={styles.inputSpinner} color="#1565C0" />}
+          {endSearching && <ActivityIndicator style={styles.inputSpinner} color="#3A6BE8" />}
         </View>
         {endLat ? <Text style={styles.coordHint}>🏁 {parseFloat(endLat).toFixed(5)}, {parseFloat(endLng).toFixed(5)}</Text> : null}
         {endSuggestions.map((loc, i) => (
@@ -383,8 +381,11 @@ export default function PlanScreen({ route, navigation }) {
         ))}
       </View>
 
-      {/* ── Max modes ── */}
-      <Text style={styles.section}>Max Modes of Transport</Text>
+      {/* Max modes */}
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionDot, { backgroundColor: '#FFB74D' }]} />
+        <Text style={styles.section}>Max Modes of Transport</Text>
+      </View>
       <View style={styles.modesRow}>
         {MAX_MODES_OPTIONS.map(n => (
           <TouchableOpacity
@@ -406,8 +407,11 @@ export default function PlanScreen({ route, navigation }) {
         {maxModes >= 4 && 'Complex multi-leg journey combinations'}
       </Text>
 
-      {/* ── Preferred modes ── */}
-      <Text style={styles.section}>Preferred Mode of Transport</Text>
+      {/* Preferred modes */}
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionDot, { backgroundColor: '#6C63FF' }]} />
+        <Text style={styles.section}>Preferred Mode of Transport</Text>
+      </View>
       <View style={styles.prefModesGrid}>
         {PREF_MODES.map(m => {
           const active = preferredModes.includes(m.key);
@@ -435,8 +439,11 @@ export default function PlanScreen({ route, navigation }) {
           : 'Preferred routes appear first'}
       </Text>
 
-      {/* ── Schedule ── */}
-      <Text style={styles.section}>When to Travel</Text>
+      {/* Schedule */}
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionDot, { backgroundColor: '#FF6B6B' }]} />
+        <Text style={styles.section}>When to Travel</Text>
+      </View>
       <View style={styles.scheduleRow}>
         <TouchableOpacity
           style={[styles.scheduleToggle, !scheduleForLater && styles.scheduleToggleActive]}
@@ -461,60 +468,94 @@ export default function PlanScreen({ route, navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.scheduleInputLabel}>Date (YYYY-MM-DD)</Text>
             <TextInput style={styles.input} placeholder="2024-12-31" value={scheduleDate}
-              onChangeText={setScheduleDate} placeholderTextColor="#aaa" keyboardType="numbers-and-punctuation" />
+              onChangeText={setScheduleDate} placeholderTextColor="#3D5A7A" keyboardType="numbers-and-punctuation" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.scheduleInputLabel}>Time (HH:MM)</Text>
             <TextInput style={styles.input} placeholder="09:00" value={scheduleTime}
-              onChangeText={setScheduleTimeStr} placeholderTextColor="#aaa" keyboardType="numbers-and-punctuation" />
+              onChangeText={setScheduleTimeStr} placeholderTextColor="#3D5A7A" keyboardType="numbers-and-punctuation" />
           </View>
         </View>
       )}
 
       <TouchableOpacity style={styles.planBtn} onPress={handlePlan} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.planBtnText}>Find Routes</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.planBtnText}>Find Routes →</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA', padding: 20 },
-  section: { fontSize: 13, fontWeight: '700', color: '#888', marginTop: 20, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  container: { flex: 1, backgroundColor: '#080F1E', padding: 20 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, marginBottom: 10 },
+  sectionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3A6BE8' },
+  section: { fontSize: 12, fontWeight: '700', color: '#4A6284', textTransform: 'uppercase', letterSpacing: 1 },
   inputRow: { flexDirection: 'row', alignItems: 'center' },
   input: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 14,
-    fontSize: 15, color: '#222', borderWidth: 1, borderColor: '#E0E0E0',
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14, padding: 15,
+    fontSize: 15, color: '#fff',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  inputSet: { borderColor: '#2E7D32', backgroundColor: '#F1F8E9' },
+  inputSet: { borderColor: '#00D68F', backgroundColor: 'rgba(0,214,143,0.08)' },
   inputSpinner: { marginLeft: 8 },
-  coordHint: { fontSize: 11, color: '#2E7D32', marginTop: 4, marginLeft: 4 },
-  suggestion: { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  suggestionText: { fontSize: 14, color: '#333' },
-  gpsBox: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  gpsText: { flex: 1, fontSize: 14, color: '#1565C0', fontWeight: '500' },
+  coordHint: { fontSize: 11, color: '#00D68F', marginTop: 5, marginLeft: 4 },
+  suggestion: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 16, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  suggestionText: { fontSize: 14, color: '#8BAFD4' },
+  gpsBox: {
+    backgroundColor: 'rgba(58,107,232,0.15)',
+    borderRadius: 14, padding: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: 'rgba(58,107,232,0.3)',
+  },
+  gpsText: { flex: 1, fontSize: 14, color: '#8BAFD4', fontWeight: '500' },
   retryBtn: { marginLeft: 10 },
-  retryText: { color: '#1565C0', fontWeight: '700', fontSize: 13 },
+  retryText: { color: '#3A6BE8', fontWeight: '700', fontSize: 13 },
   modesRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  modeChip: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#E0E0E0' },
-  modeChipActive: { borderColor: '#1565C0', backgroundColor: '#1565C0' },
-  modeChipText: { fontSize: 16, fontWeight: '700', color: '#555' },
+  modeChip: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)',
+  },
+  modeChipActive: { borderColor: '#3A6BE8', backgroundColor: '#3A6BE8' },
+  modeChipText: { fontSize: 16, fontWeight: '700', color: '#4A6284' },
   modeChipTextActive: { color: '#fff' },
-  modeHint: { fontSize: 12, color: '#888', marginTop: 8 },
-  modeDesc: { fontSize: 11, color: '#aaa', marginTop: 3 },
+  modeHint: { fontSize: 12, color: '#4A6284', marginTop: 8 },
+  modeDesc: { fontSize: 11, color: '#2E4060', marginTop: 3 },
   prefModesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  prefChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 2, borderColor: '#E0E0E0' },
-  prefChipActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
+  prefChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  prefChipActive: { borderColor: '#3A6BE8', backgroundColor: 'rgba(58,107,232,0.2)' },
   prefChipIcon: { fontSize: 16 },
-  prefChipLabel: { fontSize: 12, fontWeight: '700', color: '#888' },
-  prefChipLabelActive: { color: '#1565C0' },
+  prefChipLabel: { fontSize: 12, fontWeight: '700', color: '#4A6284' },
+  prefChipLabelActive: { color: '#6B97F5' },
   scheduleRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  scheduleToggle: { flex: 1, paddingVertical: 11, borderRadius: 10, backgroundColor: '#fff', borderWidth: 2, borderColor: '#E0E0E0', alignItems: 'center' },
-  scheduleToggleActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
-  scheduleToggleText: { fontSize: 14, fontWeight: '700', color: '#888' },
-  scheduleToggleTextActive: { color: '#1565C0' },
+  scheduleToggle: {
+    flex: 1, paddingVertical: 12, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+  },
+  scheduleToggleActive: { borderColor: '#3A6BE8', backgroundColor: 'rgba(58,107,232,0.2)' },
+  scheduleToggleText: { fontSize: 14, fontWeight: '700', color: '#4A6284' },
+  scheduleToggleTextActive: { color: '#6B97F5' },
   scheduleInputs: { flexDirection: 'row', gap: 10, marginBottom: 4 },
-  scheduleInputLabel: { fontSize: 11, color: '#888', fontWeight: '600', marginBottom: 4 },
-  planBtn: { backgroundColor: '#1565C0', borderRadius: 14, padding: 18, alignItems: 'center', marginTop: 32, marginBottom: 40 },
-  planBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  scheduleInputLabel: { fontSize: 11, color: '#4A6284', fontWeight: '600', marginBottom: 6 },
+  planBtn: {
+    backgroundColor: '#3A6BE8',
+    borderRadius: 16, padding: 19,
+    alignItems: 'center', marginTop: 32, marginBottom: 40,
+    borderWidth: 1, borderColor: '#6B97F5',
+  },
+  planBtnText: { color: '#fff', fontWeight: '800', fontSize: 17, letterSpacing: 0.3 },
 });

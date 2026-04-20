@@ -7,7 +7,7 @@ import RouteCard from '../components/RouteCard';
 export default function ResultsScreen({ route, navigation }) {
   const { plan, startLat, startLng, startName, endLat, endLng, endName } = route.params;
   const currencySymbol = plan?.currencySymbol || '₹';
-  const [sortBy, setSortBy] = useState('time'); // 'time' | 'cost'
+  const [sortBy, setSortBy] = useState('time');
 
   const sortedRoutes = useMemo(() => {
     if (!plan?.routes) return [];
@@ -21,12 +21,7 @@ export default function ResultsScreen({ route, navigation }) {
     navigation.navigate('Tracking', {
       selectedRoute: r,
       journeyId: plan.journeyId || null,
-      startLat,
-      startLng,
-      endLat,
-      endLng,
-      endName,
-      currencySymbol,
+      startLat, startLng, endLat, endLng, endName, currencySymbol,
     });
   }
 
@@ -42,6 +37,7 @@ export default function ResultsScreen({ route, navigation }) {
   if (!plan || !plan.routes) {
     return (
       <View style={styles.empty}>
+        <Text style={styles.emptyIcon}>🗺</Text>
         <Text style={styles.emptyText}>No routes found.</Text>
       </View>
     );
@@ -52,7 +48,7 @@ export default function ResultsScreen({ route, navigation }) {
       {/* Offline notice */}
       {plan.offline && (
         <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>Offline mode — routes estimated without live transit data. Connect to the server for real-time schedules.</Text>
+          <Text style={styles.offlineText}>⚡ Offline mode — routes estimated without live transit data. Connect to the server for real-time schedules.</Text>
         </View>
       )}
 
@@ -128,20 +124,22 @@ export default function ResultsScreen({ route, navigation }) {
 
       {/* Sort controls */}
       <View style={styles.sortRow}>
-        <Text style={styles.routesTitle}>{plan.routes.length} Route{plan.routes.length !== 1 ? 's' : ''}</Text>
+        <View style={styles.routesCountBadge}>
+          <Text style={styles.routesCountText}>{plan.routes.length}</Text>
+        </View>
+        <Text style={styles.routesTitle}>Route{plan.routes.length !== 1 ? 's' : ''} Found</Text>
         <View style={styles.sortBtns}>
-          <Text style={styles.sortLabel}>Sort:</Text>
           <TouchableOpacity
             style={[styles.sortBtn, sortBy === 'time' && styles.sortBtnActive]}
             onPress={() => setSortBy('time')}
           >
-            <Text style={[styles.sortBtnText, sortBy === 'time' && styles.sortBtnTextActive]}>Fastest</Text>
+            <Text style={[styles.sortBtnText, sortBy === 'time' && styles.sortBtnTextActive]}>⚡ Fastest</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.sortBtn, sortBy === 'cost' && styles.sortBtnActive]}
             onPress={() => setSortBy('cost')}
           >
-            <Text style={[styles.sortBtnText, sortBy === 'cost' && styles.sortBtnTextActive]}>Cheapest</Text>
+            <Text style={[styles.sortBtnText, sortBy === 'cost' && styles.sortBtnTextActive]}>💰 Cheapest</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -157,43 +155,65 @@ export default function ResultsScreen({ route, navigation }) {
 
       {sortedRoutes.length === 0 && (
         <View style={styles.empty}>
+          <Text style={styles.emptyIcon}>🔍</Text>
           <Text style={styles.emptyText}>No routes found. Try increasing the max modes of transport.</Text>
         </View>
       )}
 
-      <View style={{ height: 32 }} />
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA', padding: 16 },
+  container: { flex: 1, backgroundColor: '#080F1E', padding: 16 },
   summary: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 18, padding: 18, marginBottom: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  summaryLabel: { fontSize: 13, color: '#888', fontWeight: '600' },
-  summaryValue: { fontSize: 13, color: '#222', fontWeight: '600', maxWidth: '65%', textAlign: 'right' },
-  divider: { height: 1, backgroundColor: '#F0F0F0' },
-  nearbySection: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, elevation: 1 },
-  nearbyTitle: { fontSize: 13, fontWeight: '700', color: '#1565C0', marginBottom: 8 },
-  nearbyItem: { fontSize: 13, color: '#444', marginBottom: 4 },
-  sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  routesTitle: { fontSize: 16, fontWeight: '700', color: '#222' },
-  sortBtns: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sortLabel: { fontSize: 12, color: '#888' },
-  sortBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDD' },
-  sortBtnActive: { backgroundColor: '#1565C0', borderColor: '#1565C0' },
-  sortBtnText: { fontSize: 12, fontWeight: '700', color: '#555' },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  summaryLabel: { fontSize: 13, color: '#4A6284', fontWeight: '600' },
+  summaryValue: { fontSize: 13, color: '#fff', fontWeight: '600', maxWidth: '65%', textAlign: 'right' },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
+  nearbySection: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14, padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+  },
+  nearbyTitle: { fontSize: 13, fontWeight: '700', color: '#3A6BE8', marginBottom: 8 },
+  nearbyItem: { fontSize: 13, color: '#8BAFD4', marginBottom: 4 },
+  sortRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
+  routesCountBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#3A6BE8', alignItems: 'center', justifyContent: 'center',
+  },
+  routesCountText: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  routesTitle: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
+  sortBtns: { flexDirection: 'row', gap: 6 },
+  sortBtn: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  sortBtnActive: { backgroundColor: '#3A6BE8', borderColor: '#6B97F5' },
+  sortBtnText: { fontSize: 12, fontWeight: '700', color: '#4A6284' },
   sortBtnTextActive: { color: '#fff' },
   mapBtn: {
-    marginTop: -8, marginBottom: 14, marginHorizontal: 2,
-    backgroundColor: '#E3F2FD', borderRadius: 10, padding: 10, alignItems: 'center',
+    marginTop: -6, marginBottom: 14, marginHorizontal: 2,
+    backgroundColor: 'rgba(58,107,232,0.15)',
+    borderRadius: 12, padding: 11, alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(58,107,232,0.25)',
   },
-  mapBtnText: { fontSize: 13, fontWeight: '700', color: '#1565C0' },
+  mapBtnText: { fontSize: 13, fontWeight: '700', color: '#6B97F5' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyText: { color: '#888', fontSize: 15, textAlign: 'center' },
-  offlineBanner: { backgroundColor: '#FFF8E1', borderRadius: 10, padding: 12, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#F9A825' },
-  offlineText: { fontSize: 12, color: '#795548', lineHeight: 17 },
+  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  emptyText: { color: '#4A6284', fontSize: 15, textAlign: 'center' },
+  offlineBanner: {
+    backgroundColor: 'rgba(255,183,77,0.1)',
+    borderRadius: 12, padding: 13, marginBottom: 14,
+    borderLeftWidth: 4, borderLeftColor: '#FFB74D',
+    borderWidth: 1, borderColor: 'rgba(255,183,77,0.2)',
+  },
+  offlineText: { fontSize: 12, color: '#FFB74D', lineHeight: 18 },
 });
