@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 Vipul Agrawal. All Rights Reserved.
+// Proprietary and confidential. Unauthorized copying, distribution,
+// or modification of this file is strictly prohibited.
+// See LICENSE file in the project root for full terms.
+
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
