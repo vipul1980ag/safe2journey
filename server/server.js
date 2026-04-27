@@ -29,7 +29,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Dat
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Safe2Journey server running on http://localhost:${PORT}`);
+    console.log(`Safe2Go server running on http://localhost:${PORT}`);
     console.log(`Admin panel: http://localhost:${PORT}/admin.html`);
   });
 }

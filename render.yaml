@@ -1,9 +1,11 @@
 services:
   - type: web
-    name: safe2journey
+    name: safe2go
     runtime: node
     buildCommand: cd server && npm install
     startCommand: cd server && node server.js
+    domains:
+      - name: safe2go.dnw-ai.com
     envVars:
       - key: NODE_ENV
         value: production
