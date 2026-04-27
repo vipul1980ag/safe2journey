@@ -1,0 +1,12 @@
+{
+  "name": "safe2go",
+  "version": "1.0.0",
+  "description": "Safe2Go multi-modal journey planner",
+  "scripts": {
+    "start": "node server/server.js",
+    "postinstall": "npm install --prefix server"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
