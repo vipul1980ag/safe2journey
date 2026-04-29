@@ -1320,11 +1320,13 @@ function renderTracking() {
           ${leg.nextScheduled ? `<span class="track-stat">🕐 ${leg.nextScheduled}</span>` : ''}
           ${leg.routeId ? `<span class="track-stat">Route ${leg.routeId}</span>` : ''}
           ${leg.line ? `<span class="track-stat" style="color:#7B1FA2">${leg.line}</span>` : ''}
+          <a href="${_bookingUrl(leg.mode,leg.from,leg.to)}" target="_blank" rel="noopener" class="track-stat" style="background:#1565C0;color:#fff;border-radius:4px;padding:2px 8px;text-decoration:none;font-size:11px">${_bookingLabel(leg.mode)}</a>
         </div>
       </div>
       <div id="track-status"></div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button class="btn btn-outline btn-sm" onclick="checkProgress()" style="flex:1">🔄 Check Progress</button>
+        <button class="btn btn-outline btn-sm" onclick="checkProgress()" style="flex:1">🔄 Check</button>
+        <button class="btn btn-sm" onclick="showDisruptionMenu()" style="background:#E65100;color:#fff;border:none;flex:1">🚨 Issue</button>
         <button class="btn btn-green" onclick="completeLeg()" style="flex:2">
           ${isLast ? '🏁 Arrive' : '✅ Done · Next: '+MODE_ICONS[nextLeg?.mode]+' '+MODE_LABELS[nextLeg?.mode]}
         </button>
@@ -1398,6 +1400,25 @@ function tickCountdown(leg) {
   trackingState.cdTimer = setInterval(run, 1000);
 }
 
+const BOOKING_LABELS = { taxi:'🚕 Get Taxi', auto:'🚕 Get Auto', train:'🚆 Book Train', bus:'🚌 Book Bus', metro:'🚇 Transit Map', tram:'🚋 Transit Map', air:'✈️ Search Flights', ferry:'⛴️ Book Ferry', walking:'📍 Maps', car_bike:'🛵 Maps' };
+function _bookingLabel(mode) { return BOOKING_LABELS[mode] || '📍 Maps'; }
+function _bookingUrl(mode, from, to) {
+  const f = encodeURIComponent(from||''), t = encodeURIComponent(to||'');
+  const pos = currentGpsPos || startLoc;
+  const dst = endLoc;
+  switch(mode) {
+    case 'taxi': case 'auto':
+      if (pos && dst) return `https://m.uber.com/ul/?action=setPickup&pickup[latitude]=${pos.lat}&pickup[longitude]=${pos.lng}&dropoff[latitude]=${dst.lat}&dropoff[longitude]=${dst.lng}&dropoff[nickname]=${t}`;
+      return 'https://www.uber.com/';
+    case 'train': return `https://www.trainline.com/search/${f}/${t}`;
+    case 'air': return `https://www.google.com/travel/flights?q=flights+from+${f}+to+${t}`;
+    case 'ferry': return `https://www.directferries.com/`;
+    default:
+      if (pos) return `https://www.google.com/maps/dir/?api=1&origin=${pos.lat},${pos.lng}&destination=${encodeURIComponent(to||'')}&travelmode=transit`;
+      return `https://www.google.com/maps/dir/?api=1&origin=${f}&destination=${t}&travelmode=transit`;
+  }
+}
+
 function _replanPayload(leg) {
   const pos = currentGpsPos || startLoc;
   return {
@@ -1410,17 +1431,21 @@ function _replanPayload(leg) {
   };
 }
 
+function _altRowHtml(route, i, sym) {
+  const fl = route.legs[0];
+  return `<div style="display:flex;align-items:center;gap:6px;margin:4px 0;padding:6px 8px;background:rgba(255,255,255,0.7);border-radius:6px;flex-wrap:wrap">
+    <span style="font-size:12px;flex:1;min-width:0"><b>${route.label}</b> · ${route.totalDurationMins} min · ${sym}${route.totalCost}</span>
+    <a href="${_bookingUrl(fl.mode,fl.from,fl.to)}" target="_blank" rel="noopener" class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:#1565C0;color:#fff;text-decoration:none;white-space:nowrap">${_bookingLabel(fl.mode)}</a>
+    <button class="btn btn-sm" onclick="applyReplan(${i})" style="padding:3px 8px;font-size:11px;white-space:nowrap">Use Route</button>
+  </div>`;
+}
+
 function _buildReplanHtml(d) {
   let html = `<div class="status-box s-warn">⚠️ ${d.status.message}</div>`;
   if (d.newPlan?.routes?.length) {
     window._rp = d.newPlan;
     const sym = d.newPlan.currencySymbol || '';
-    const alts = d.newPlan.routes.slice(0, 3).map((r, i) =>
-      `<div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0;padding:6px 8px;background:rgba(255,255,255,0.7);border-radius:6px">
-        <span style="font-size:13px"><b>${r.label}</b> · ${r.totalDurationMins} min · ${sym}${r.totalCost}</span>
-        <button class="btn btn-sm" onclick="applyReplan(${i})" style="padding:3px 10px;font-size:12px">Use</button>
-      </div>`
-    ).join('');
+    const alts = d.newPlan.routes.slice(0, 3).map((r, i) => _altRowHtml(r, i, sym)).join('');
     html += `<div class="status-box s-info" style="padding:10px 12px">
       <div style="font-weight:700;margin-bottom:6px">🔄 Suggested Alternatives:</div>${alts}
     </div>`;
@@ -1460,6 +1485,46 @@ function applyReplan(idx) {
   trackingState = {legIndex:0, startTime:Date.now(), elapsedTimer:null, cdTimer:null, gpsWatchId:savedWatchId, progressTimer:null};
   drawRouteOnMap(selectedRoute, planData);
   renderTracking();
+}
+
+function showDisruptionMenu() {
+  const statusEl = document.getElementById('track-status');
+  if (!statusEl) return;
+  statusEl.innerHTML = `
+    <div class="status-box s-warn" style="padding:12px">
+      <div style="font-weight:700;margin-bottom:8px">🚨 What happened?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="reportDisruption('missed')"   style="background:#BF360C;color:#fff;border:none">❌ Missed it</button>
+        <button class="btn btn-sm" onclick="reportDisruption('delayed')"  style="background:#E65100;color:#fff;border:none">⏳ Delayed</button>
+        <button class="btn btn-sm" onclick="reportDisruption('cancelled')" style="background:#4A148C;color:#fff;border:none">🚫 Cancelled</button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('track-status').innerHTML=''">✕ Dismiss</button>
+      </div>
+    </div>`;
+}
+
+async function reportDisruption(type) {
+  const statusEl = document.getElementById('track-status');
+  if (!statusEl) return;
+  const leg = selectedRoute?.legs[trackingState.legIndex];
+  statusEl.innerHTML = '<div class="status-box s-info"><span class="spin" style="border-top-color:#1565C0;border-color:rgba(21,101,192,.25)"></span> Finding alternatives…</div>';
+  try {
+    const pos = currentGpsPos || startLoc;
+    const d = await fetch(`${API}/journey/disruption`, {method:'POST', headers:authHdrs(), body:JSON.stringify({
+      currentLat: pos?.lat, currentLng: pos?.lng,
+      endLat: endLoc?.lat, endLng: endLoc?.lng, endName: endLoc?.name || 'Destination',
+      disruption: type, affectedMode: leg?.mode,
+    })}).then(r => r.json());
+    let html = `<div class="status-box s-warn">${d.message}</div>`;
+    if (d.plan?.routes?.length) {
+      window._rp = d.plan;
+      const sym = d.plan.currencySymbol || '';
+      const alts = d.plan.routes.slice(0, 3).map((r, i) => _altRowHtml(r, i, sym)).join('');
+      html += `<div class="status-box s-info" style="padding:10px 12px">
+        <div style="font-weight:700;margin-bottom:6px">🔄 Available Alternatives:</div>${alts}
+      </div>`;
+    }
+    statusEl.innerHTML = html;
+  } catch(e) { statusEl.innerHTML = `<div class="status-box s-warn">Could not find alternatives: ${e.message}</div>`; }
 }
 
 function completeLeg() {
