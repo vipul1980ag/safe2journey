@@ -1266,7 +1266,15 @@ function selectRoute(idx) {
   if (currentSort==='cost') routes.sort((a,b)=>a.totalCost-b.totalCost);
   else routes.sort((a,b)=>a.totalDurationMins-b.totalDurationMins);
   selectedRoute = routes[idx];
-  trackingState = {legIndex:0, startTime:Date.now(), elapsedTimer:null, cdTimer:null};
+  const prevWatchId = trackingState?.gpsWatchId;
+  trackingState = {legIndex:0, startTime:Date.now(), elapsedTimer:null, cdTimer:null, gpsWatchId:null, progressTimer:null};
+  if (prevWatchId != null) navigator.geolocation.clearWatch(prevWatchId);
+  if (navigator.geolocation) {
+    trackingState.gpsWatchId = navigator.geolocation.watchPosition(
+      pos => _storeGpsPos(pos.coords.latitude, pos.coords.longitude),
+      null, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 }
+    );
+  }
   drawRouteOnMap(selectedRoute, planData);
   aiAnalyzeRoute(selectedRoute);
   document.getElementById('tbtn-track').style.display = 'inline-block';
@@ -1340,7 +1348,9 @@ function renderTracking() {
 
   if(trackingState.elapsedTimer) clearInterval(trackingState.elapsedTimer);
   if(trackingState.cdTimer) clearInterval(trackingState.cdTimer);
+  if(trackingState.progressTimer) clearInterval(trackingState.progressTimer);
   trackingState.elapsedTimer = setInterval(() => tickElapsed(leg), 1000);
+  trackingState.progressTimer = setInterval(autoCheckProgress, 30000);
   if (leg.nextScheduled && leg.nextScheduled !== 'N/A') tickCountdown(leg);
 }
 
@@ -1388,39 +1398,66 @@ function tickCountdown(leg) {
   trackingState.cdTimer = setInterval(run, 1000);
 }
 
+function _replanPayload(leg) {
+  const pos = currentGpsPos || startLoc;
+  return {
+    startLat: startLoc?.lat, startLng: startLoc?.lng,
+    currentLat: pos?.lat, currentLng: pos?.lng,
+    expectedDistKm: leg.distanceKm,
+    startTime: trackingState.startTime,
+    expectedDurationMins: leg.durationMins,
+    endLat: endLoc?.lat, endLng: endLoc?.lng, endName: endLoc?.name || 'Destination',
+  };
+}
+
+function _buildReplanHtml(d) {
+  let html = `<div class="status-box s-warn">⚠️ ${d.status.message}</div>`;
+  if (d.newPlan?.routes?.length) {
+    window._rp = d.newPlan;
+    const sym = d.newPlan.currencySymbol || '';
+    const alts = d.newPlan.routes.slice(0, 3).map((r, i) =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0;padding:6px 8px;background:rgba(255,255,255,0.7);border-radius:6px">
+        <span style="font-size:13px"><b>${r.label}</b> · ${r.totalDurationMins} min · ${sym}${r.totalCost}</span>
+        <button class="btn btn-sm" onclick="applyReplan(${i})" style="padding:3px 10px;font-size:12px">Use</button>
+      </div>`
+    ).join('');
+    html += `<div class="status-box s-info" style="padding:10px 12px">
+      <div style="font-weight:700;margin-bottom:6px">🔄 Suggested Alternatives:</div>${alts}
+    </div>`;
+  }
+  return html;
+}
+
 async function checkProgress() {
   const leg = selectedRoute.legs[trackingState.legIndex];
   const statusEl = document.getElementById('track-status');
   if (!statusEl) return;
   statusEl.innerHTML = '<div class="status-box s-info"><span class="spin" style="border-top-color:#1565C0;border-color:rgba(21,101,192,.25)"></span> Checking…</div>';
   try {
-    const r = await fetch(`${API}/journey/replan`, {method:'POST', headers:authHdrs(), body:JSON.stringify({
-      startLat: startLoc?.lat, startLng: startLoc?.lng,
-      currentLat: (startLoc?.lat||0)+(Math.random()-.5)*.004,
-      currentLng: (startLoc?.lng||0)+(Math.random()-.5)*.004,
-      expectedDistKm: leg.distanceKm,
-      startTime: trackingState.startTime,
-      expectedDurationMins: leg.durationMins,
-      endLat: endLoc?.lat, endLng: endLoc?.lng, endName: endLoc?.name||'Destination',
-    })});
+    const r = await fetch(`${API}/journey/replan`, {method:'POST', headers:authHdrs(), body:JSON.stringify(_replanPayload(leg))});
     const d = await r.json();
-    if (d.replanNeeded) {
-      let html = `<div class="status-box s-warn">⚠️ ${d.status.message}</div>`;
-      if (d.newPlan?.routes?.length) {
-        window._rp = d.newPlan;
-        html += `<div class="status-box s-info">🔄 New route: <b>${d.newPlan.routes[0].label}</b> — ₹${d.newPlan.routes[0].totalCost}, ${d.newPlan.routes[0].totalDurationMins} min <button class="btn btn-sm" style="margin-left:8px" onclick="applyReplan()">Use</button></div>`;
-      }
-      statusEl.innerHTML = html;
-    } else {
-      statusEl.innerHTML = `<div class="status-box s-ok">✅ You are on track!</div>`;
-    }
-  } catch(e) { statusEl.innerHTML=`<div class="status-box s-warn">Could not check: ${e.message}</div>`; }
+    statusEl.innerHTML = d.replanNeeded ? _buildReplanHtml(d) : `<div class="status-box s-ok">✅ You are on track!</div>`;
+  } catch(e) { statusEl.innerHTML = `<div class="status-box s-warn">Could not check: ${e.message}</div>`; }
 }
 
-function applyReplan() {
+function autoCheckProgress() {
+  const leg = selectedRoute?.legs[trackingState.legIndex];
+  if (!leg) return;
+  const elapsed = Date.now() - trackingState.startTime;
+  if (elapsed < leg.durationMins * 60 * 1000 * 0.1) return;
+  fetch(`${API}/journey/replan`, {method:'POST', headers:authHdrs(), body:JSON.stringify(_replanPayload(leg))})
+    .then(r => r.json()).then(d => {
+      if (!d.replanNeeded) return;
+      const statusEl = document.getElementById('track-status');
+      if (statusEl) statusEl.innerHTML = _buildReplanHtml(d);
+    }).catch(() => {});
+}
+
+function applyReplan(idx) {
   if (!window._rp) return;
-  planData = window._rp; selectedRoute = window._rp.routes[0];
-  trackingState = {legIndex:0, startTime:Date.now(), elapsedTimer:null, cdTimer:null};
+  const savedWatchId = trackingState?.gpsWatchId;
+  planData = window._rp; selectedRoute = window._rp.routes[idx || 0];
+  trackingState = {legIndex:0, startTime:Date.now(), elapsedTimer:null, cdTimer:null, gpsWatchId:savedWatchId, progressTimer:null};
   drawRouteOnMap(selectedRoute, planData);
   renderTracking();
 }
@@ -1428,8 +1465,10 @@ function applyReplan() {
 function completeLeg() {
   if(trackingState.elapsedTimer) clearInterval(trackingState.elapsedTimer);
   if(trackingState.cdTimer) clearInterval(trackingState.cdTimer);
+  if(trackingState.progressTimer) clearInterval(trackingState.progressTimer);
   const isLast = trackingState.legIndex === selectedRoute.legs.length - 1;
   if (isLast) {
+    if (trackingState.gpsWatchId != null) navigator.geolocation.clearWatch(trackingState.gpsWatchId);
     document.getElementById('tracking-panel').innerHTML = `
       <div class="card" style="text-align:center;padding:48px 20px">
         <div style="font-size:64px;margin-bottom:14px">🏁</div>
@@ -1565,6 +1604,13 @@ function _storeGpsPos(lat, lng) { currentGpsPos = { lat, lng }; }
   const orig = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
   navigator.geolocation.getCurrentPosition = function(success, error, opts) {
     return orig(pos => {
+      _storeGpsPos(pos.coords.latitude, pos.coords.longitude);
+      success(pos);
+    }, error, opts);
+  };
+  const origWatch = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+  navigator.geolocation.watchPosition = function(success, error, opts) {
+    return origWatch(pos => {
       _storeGpsPos(pos.coords.latitude, pos.coords.longitude);
       success(pos);
     }, error, opts);
